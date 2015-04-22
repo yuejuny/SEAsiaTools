@@ -1,0 +1,263 @@
+---
+title: "Indonesia IED distribution"
+author: "Yue-Jun Yin"
+output:
+  html_document:
+    css: markdown.css
+    number_sections: yes
+    toc: yes
+    theme: cerulean
+---
+**Time of analysis:  `r Sys.time()`**
+```{r setup, include=F}
+knitr::opts_chunk$set(cache=TRUE)
+```
+# Setup
+```{r}
+setwd('w:/EngineerTeam/EP_IED/IED_2015/Indonesia/RawIED_Data')
+Indo.IED <- read.csv('./ID_IED_AllProperty_2015APR15.csv')
+```
+
+```{r}
+thousand <- 10^3
+million <- 10^6
+billion <- 10^9
+exch.rate  <-  0.000078
+```
+Load packages.
+```{r}
+require(xtable)
+```
+# Overview of Indonesia IED
+```{r results = 'asis'}
+df <- tapply(Indo.IED$RVA + 
+	     Indo.IED$RVC + 
+	     Indo.IED$RVD,
+             INDEX = list(CC = Indo.IED$CC,
+			  OCC = Indo.IED$OCC),
+             FUN = sum)
+df <- df * exch.rate / million
+print(xtable(df,
+	     caption = 'Indonesian IED (million USD)',
+	     digits = 0),
+      type = 'html',
+      caption.placement = 'top',
+      format.args = list(big.mark = ','))
+```
+```{r results = 'asis'}
+df <- tapply(Indo.IED$RVA + Indo.IED$RVC + Indo.IED$RVD,
+	     INDEX = list(CRESTA = Indo.IED$CRESTA),
+	     FUN = sum)
+df <- df * exch.rate / million
+print(xtable(df,
+	     caption = 'Indonesian IED (million USD)',
+	     digits = 0),
+      type = 'html',
+      caption.placement = 'top',
+      format.args = list(big.mark = ','))
+
+```
+
+
+```{r results = 'asis'}
+LOB <- rep('Residential', nrow(Indo.IED))
+if(sum(Indo.IED$LOB == 2) > 0) LOB[Indo.IED$LOB == 2] <- 'Commercial'
+if(sum(Indo.IED$LOB == 7) > 0) LOB[Indo.IED$LOB == 7] <- 'Industrial'
+if(sum(Indo.IED$LOB == 4) > 0) LOB[Indo.IED$LOB == 4] <- 'Auto'
+if(sum(Indo.IED$LOB == 8) > 0) LOB[Indo.IED$LOB == 8] <- 'Agricultural'
+df <- tapply(Indo.IED$RVA + Indo.IED$RVC + Indo.IED$RVD,
+	     INDEX = list(LOB),
+	     FUN = sum)
+df <- df * exch.rate / million
+print(xtable(df,
+	     caption = 'Indonesian IED (million USD)',
+	     digits = 0),
+      type = 'html',
+      caption.placement = 'top',
+      format.args = list(big.mark = ','))
+```
+# Building Height Band Definition
+
+This report uses Indonesian IED **excluding 400 (IFM), 261 (auto), and 700 (uninsurable crap building) risks**. 
+
+```{r}
+Indo.IED <- Indo.IED[Indo.IED$CC != 100 & Indo.IED$CC != 261 & Indo.IED$CC != 700,]
+ht.bands <- rep('1_Low',nrow(Indo.IED))
+ht.bands[Indo.IED$NStory >= 4 & Indo.IED$NStory <= 8] <- '2_Mid'
+ht.bands[Indo.IED$NStory >= 9 & Indo.IED$NStory <= 25] <- '3_High'
+ht.bands[Indo.IED$NStory >= 26] <- '4_Tall'
+```
+
+# Distribution by construction and height 
+```{r results='asis'}
+df <- tapply(Indo.IED$RVA/million, INDEX = list(CC = Indo.IED$CC, Height = ht.bands), FUN = sum)
+print(xtable(df,
+             caption = 'Indonesia IED (million LCU)',
+             display = c('d','f','f','f','f'),
+             digits = 0),
+      type = 'html',
+      caption.placement = 'top',
+      format.args = list(big.mark = ','))
+write.csv(df, file = './output/IED_cc_height_RV_distribution.csv')
+```
+
+```{r results = 'asis'}
+df[is.na(df)] <- 0.0
+df <- df / rowSums(df) * 100
+print(xtable(df,
+             caption = 'Indonesia IED (%)',
+             display = c('d','d','d','d','d'),
+             digits = 0),
+      type = 'html',
+      caption.placement = 'top')
+write.csv(df, file = './output/IED_cc_height_RV_distribution_percent.csv')
+```
+
+# Distributin by occupancy and height
+```{r results='asis'}
+df <- tapply(Indo.IED$RVA/million, INDEX = list(OCC = Indo.IED$OCC, Height = ht.bands), FUN = sum)
+print(xtable(df,
+             caption = 'Indonesia IED (million LCU)',
+             display = c('d','f','f','f','f'),
+             digits = 0),
+      type = 'html',
+      caption.placement = 'top',
+      format.args = list(big.mark = ','))
+write.csv(df, file = './output/IED_occ_height_RV_distribution.csv')
+```
+
+```{r results = 'asis'}
+df[is.na(df)] <- 0.0
+df <- df / rowSums(df) * 100
+print(xtable(df,
+             caption = 'Indonesia IED (%)',
+             display = c('d','d','d','d','d'),
+             digits = 0),
+      type = 'html',
+      caption.placement = 'top')
+write.csv(df, file = './output/IED_occ_height_RV_distribution_percent.csv')
+```
+
+```{r results = 'asis'}
+df <- tapply(Indo.IED$RVA/million,
+             INDEX = list(OCC = Indo.IED$OCC, CC = Indo.IED$CC,Height = ht.bands),
+             FUN = sum)
+df[is.na(df)] <- 0
+temp <- df
+for(k in 1:dim(df)[3])
+  {
+    temp[,,k] <- df[,,k] / rowSums(df[,,k]) * 100
+    temp[is.na(temp)] <-0
+    h <- switch(k,'1_Low','2_Mid','3_High','4_Tall')
+    print(xtable(temp[,,k],
+                 caption = paste(h,'--Jakarta IED (%)'),
+                 digits = 0),
+          type = 'html',
+          caption.placement = 'top')
+    file.name <- switch(k, './output/IED_occ_LowRise_cc_distribution_percent.csv',
+                        './output/IED_occ_MidRise_cc_distribution_percent.csv',
+                        './output/IED_occ_HighRise_cc_distribution_percent.csv',
+                        './output/IED_occ_TallRise_cc_distribution_percent.csv')
+    write.csv(temp[,,k],file = file.name)
+    
+  }
+
+    
+```
+
+
+```{r results='asis'}
+df <- tapply(Indo.IED$RVA / million,
+             INDEX = list(height = ht.bands,CC = Indo.IED$CC),
+             FUN = sum)
+df[is.na(df)]<-0
+df <- df / rowSums(df) * 100
+print(xtable(df,
+             caption = 'Jakarta IED distribution (%)',
+             digits = 0),
+      type = 'html',
+      caption.placement = 'top')
+write.csv(df, file = './output/unknown_cc_occ_distribution_percent.csv')
+```
+
+# Distribution by material
+```{r}
+material <- rep('unknown',nrow(Indo.IED))
+material[Indo.IED$CC >= 101 & Indo.IED$CC <= 108] <- 'wood'
+material[Indo.IED$CC >= 111 & Indo.IED$CC <= 121] <- 'masonry'
+material[Indo.IED$CC >= 131 & Indo.IED$CC <= 140] <- 'RC'
+material[Indo.IED$CC >= 151 & Indo.IED$CC <= 160] <- 'steel'
+```
+
+```{r results = 'asis'}
+idx <- material == 'wood'
+if(sum(idx) > 0)
+  {
+    df <- tapply(Indo.IED$RVA[idx]/million,
+                 INDEX = list(height = ht.bands[idx], CC = Indo.IED$CC[idx]),
+                 FUN = sum)
+    df[is.na(df)] <- 0.0
+    df <- df/rowSums(df) * 100
+    print(xtable(df,
+                 caption = 'Indonesia IED wood construction (%)',
+                 display = rep('d',1 + ncol(df))),
+          type = 'html',
+          caption.placement = 'top')
+    write.csv(df, file = './output/wood_cc_height_distribution_percent.csv')
+  }
+```
+
+```{r results = 'asis'}
+idx <- material == 'masonry'
+if(sum(idx) > 0)
+  {
+    df <- tapply(Indo.IED$RVA[idx]/million,
+                 INDEX = list(height = ht.bands[idx], CC = Indo.IED$CC[idx]),
+                 FUN = sum)
+    df[is.na(df)] <- 0.0
+    df <- df/rowSums(df) * 100
+    print(xtable(df,
+                 caption = 'Indonesia IED masonry construction (%)',
+                 display = rep('d',1 + ncol(df))),
+          type = 'html',
+          caption.placement = 'top')
+    write.csv(df, file = './output/masonry_cc_height_distribution_percent.csv')
+  }
+```
+
+```{r results = 'asis'}
+idx <- material == 'RC'
+if(sum(idx) > 0)
+  {
+    df <- tapply(Indo.IED$RVA[idx]/million,
+                 INDEX = list(height = ht.bands[idx],CC = Indo.IED$CC[idx]),
+                 FUN = sum)
+    df[is.na(df)] <- 0.0
+    df <- df/rowSums(df) * 100
+    print(xtable(df,
+                 caption = 'Indonesia IED RC construction (%)',
+                 display = rep('d',1 + ncol(df))),
+          type = 'html',
+          caption.placement = 'top')
+    write.csv(df, file = './output/RC_cc_height_distribution_percent.csv')
+  }
+```
+
+```{r results = 'asis'}
+idx <- material == 'steel'
+if(sum(idx) > 0)
+  {
+    df <- tapply(Indo.IED$RVA[idx]/million,
+                 INDEX = list(height = ht.bands[idx],CC = Indo.IED$CC[idx]),
+                 FUN = sum)
+    df[is.na(df)] <- 0.0
+    df <- df/rowSums(df) * 100
+    print(xtable(df,
+                 caption = 'Indonesia IED steel construction (%)',
+                 display = rep('d',1 + ncol(df))),
+          type = 'html',
+          caption.placement = 'top')
+    write.csv(df, file = './output/steel_cc_height_distribution_percent.csv')
+  }
+```
+
