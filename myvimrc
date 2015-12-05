@@ -1,13 +1,10 @@
 set nocompatible " be iMproved, required
 filetype off " required
-" set the runtime path to include Vundle and initialize
 set rtp+=~/.vim/bundle/Vundle.vim
+" set rtp+=c:\VIM74\Vim\vimfiles\bundle\Vundle.vim "windows setting
 call vundle#begin()
 
-" let Vundle manage itself, required
 Plugin 'gmarik/Vundle.vim'
-
-" Plugins
 Plugin 'jalvesaq/R-Vim-runtime'
 Plugin 'jcfaria/Vim-R-plugin'
 Plugin 'chrisbra/csv.vim'
@@ -69,3 +66,19 @@ nmap <Space> <Plug>RDSendLine
 set shellslash
 set grepprg=grep\ -nH\ $*
 let g:tex_flavor='latex'
+
+" moving around windows
+map <C-j> <C-W>j
+map <C-k> <C-W>k
+map <C-h> <C-W>h
+map <C-l> <C-W>l
+
+" map a replace command to short cut key
+" replacing backward slash to forward slash
+" in selecting mode
+" used for windows OS
+" map <F2> :s/\\/\//g
+
+" Use the arrows to something usefull
+map <right> :bn<cr>
+map <left> :bp<cr>
