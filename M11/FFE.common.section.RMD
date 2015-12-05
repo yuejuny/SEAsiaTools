@@ -1,0 +1,1865 @@
+# Modeled ground motion intensity
+
+## Catalog Information
+
+```{r catalog.info,echo=F,results='asis'}
+pandoc.table(as.data.frame(catalog[EventID==event.ID,]),style='rmarkdown')
+```
+
+```{r function.rupture,echo=F,include=F}
+catalog <- catalog[EventID==event.ID,]
+if(nrow(catalog) > 1){
+  catalog <- catalog[NumSegments>0,]
+}else{
+  catalog$NumSegments <- 1
+}
+out.sr <- list()
+for(i in 1:nrow(catalog)){
+  out.sr[[i]] <- rupture.polygon(Lon=catalog$Lon[i],
+                                 Lat=catalog$Lat[i],
+                                 Depth=catalog$FocalDepth[i],
+                                 Length=catalog$Length[i],
+                                 Width=catalog$Width[i],
+                                 Azimuth=catalog$Azimuth[i], 
+                                 DipAngle=catalog$DipAngle[i],
+                                 DipAzi=catalog$DipAzimuth[i],
+                                 segmentID=catalog$NumSegments[i])
+}
+sr <- SpatialPolygons(out.sr, proj4string=CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs'))
+att.tb <- data.frame(segment=catalog$NumSegments)
+rownames(att.tb) <- as.character(att.tb$segment)
+rupture.srdf <- SpatialPolygonsDataFrame(sr,data=att.tb,match.ID=T)
+```
+
+## Modeled MMI 
+
+### Pre-made ground motion MMI 
+
+```{r MMI.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(pre.made.GM.intensity){
+  rst <- raster(MMI.raster)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'MMI')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('MMI'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'MMI')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### MMI map from EQSim footprint file
+
+```{r fp.based.MMI.prepare, echo = FALSE, include =FALSE}
+GM.int.FP <- EQsim.data[,.(Lon,Lat,value=MMI)]
+LongMin <- floor(min(GM.int.FP$Lon))
+LongMax <- ceiling(max(GM.int.FP$Lon))
+LatMin <- floor(min(GM.int.FP$Lat))
+LatMax <- ceiling(max(GM.int.FP$Lat))
+background <- raster(xmn = LongMin, xmx = LongMax,
+                     ymn = LatMin, ymx = LatMax,
+                     resolution = raster.res)
+grid.ctr <- GM.int.FP[,.(Lon,Lat)]
+rst <- rasterize(grid.ctr, background, fun = mean,
+                 field = GM.int.FP[,.(value)])
+writeRaster(rst, filename = file.path(getwd(),'maps',
+                                      paste0(event.name,'MMI.from.Footprint.',today,'.img')),
+            format = 'HFA',overwrite = T)
+```
+
+```{r fp.based.MMI.Map, fig.width=12,fig.height=8,warning=F}
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'MMI')
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('MMI'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'MMI')
+  m 
+```
+
+## Modeled PGA 
+
+### Pre-made raster map of PGA using contrived exposure
+
+```{r PGA.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(pre.made.GM.intensity){
+  rst <- raster(PGA.raster)
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'PGA')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('PGA'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'PGA, g')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### PGA map based on EQSim footprint file
+
+```{r fp.based.PGA.prepare, echo = FALSE, include =FALSE}
+GM.int.FP <- EQsim.data[,.(Lon,Lat,value=PGA)]
+LongMin <- floor(min(GM.int.FP$Lon))
+LongMax <- ceiling(max(GM.int.FP$Lon))
+LatMin <- floor(min(GM.int.FP$Lat))
+LatMax <- ceiling(max(GM.int.FP$Lat))
+background <- raster(xmn = LongMin, xmx = LongMax,
+                     ymn = LatMin, ymx = LatMax,
+                     resolution = raster.res)
+grid.ctr <- GM.int.FP[,.(Lon,Lat)]
+rst <- rasterize(grid.ctr, background, fun = mean,
+                 field = GM.int.FP[,.(value)])
+writeRaster(rst, filename = file.path(getwd(),'maps',paste0(event.name,'PGA.from.Footprint.',today,'.img')),
+            format = 'HFA',overwrite = T)
+```
+
+```{r fp.based.PGA.Map, fig.width=12,fig.height=8,warning=F}
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'PGA')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('PGA'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'PGA')
+  m 
+```
+
+## Modeled Sa 0.3 sec 
+
+### Pre-made raster map using contrived exposure
+
+```{r SA03.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(pre.made.GM.intensity){
+  rst <- raster(SA03.raster)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA0.3')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA0.3'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'SA0.3, g')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### Sa 0.3 map based on EQSim footprint file
+
+```{r fp.based.SA03.prepare, echo = FALSE, include =FALSE}
+GM.int.FP <- EQsim.data[,.(Lon,Lat,value=SA03)]
+LongMin <- floor(min(GM.int.FP$Lon))
+LongMax <- ceiling(max(GM.int.FP$Lon))
+LatMin <- floor(min(GM.int.FP$Lat))
+LatMax <- ceiling(max(GM.int.FP$Lat))
+background <- raster(xmn = LongMin, xmx = LongMax,
+                     ymn = LatMin, ymx = LatMax,
+                     resolution = raster.res)
+grid.ctr <- GM.int.FP[,.(Lon,Lat)]
+rst <- rasterize(grid.ctr, background, fun = mean,
+                 field = GM.int.FP[,.(value)])
+writeRaster(rst, filename = file.path(getwd(),'maps',paste0(event.name,'SA03.from.Footprint.',today,'.img')),
+            format = 'HFA',overwrite = T)
+```
+
+```{r fp.based.SA03.Map, fig.width=12,fig.height=8,warning=F}
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA03')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA03'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Sa 0.3s, g')
+  m 
+```
+
+## Modeled Sa 1.0 sec 
+
+### Pre-made Sa 1.0s map using contrived exposure
+
+```{r SA1.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(pre.made.GM.intensity){
+  rst <- raster(SA1.raster)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA1')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA1'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'SA1, g')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### Sa 1.0s map based on EQSim footprint file
+
+```{r fp.based.SA1.prepare, echo = FALSE, include =FALSE}
+GM.int.FP <- EQsim.data[,.(Lon,Lat,value=SA1)]
+LongMin <- floor(min(GM.int.FP$Lon))
+LongMax <- ceiling(max(GM.int.FP$Lon))
+LatMin <- floor(min(GM.int.FP$Lat))
+LatMax <- ceiling(max(GM.int.FP$Lat))
+background <- raster(xmn = LongMin, xmx = LongMax,
+                     ymn = LatMin, ymx = LatMax,
+                     resolution = raster.res)
+grid.ctr <- GM.int.FP[,.(Lon,Lat)]
+rst <- rasterize(grid.ctr, background, fun = mean,
+                 field = GM.int.FP[,.(value)])
+writeRaster(rst, filename = file.path(getwd(),'maps',paste0(event.name,'SA1.from.Footprint.',today,'.img')),
+            format = 'HFA',overwrite = T)
+```
+
+```{r fp.based.SA1.Map, fig.width=12,fig.height=8,warning=F}
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA1')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA1'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Sa 1.0s, g')
+  m 
+```
+
+## Modeled Sa 3.0 sec 
+
+### Pre-made raster using contrived exposure
+
+```{r SA3.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(pre.made.GM.intensity){
+  rst <- raster(SA3.raster)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA3')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA3'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'SA3, g')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### Sa 3.0s map based on EQSim footprint file
+
+```{r fp.based.SA3.prepare, echo = FALSE, include =FALSE}
+GM.int.FP <- EQsim.data[,.(Lon,Lat,value=SA3)]
+LongMin <- floor(min(GM.int.FP$Lon))
+LongMax <- ceiling(max(GM.int.FP$Lon))
+LatMin <- floor(min(GM.int.FP$Lat))
+LatMax <- ceiling(max(GM.int.FP$Lat))
+background <- raster(xmn = LongMin, xmx = LongMax,
+                     ymn = LatMin, ymx = LatMax,
+                     resolution = raster.res)
+grid.ctr <- GM.int.FP[,.(Lon,Lat)]
+rst <- rasterize(grid.ctr, background, fun = mean,
+                 field = GM.int.FP[,.(value)])
+writeRaster(rst, filename = file.path(getwd(),'maps',paste0(event.name,'SA3.from.Footprint.',today,'.img')),
+            format = 'HFA',overwrite = T)
+```
+
+```{r fp.based.SA3.Map, fig.width=12,fig.height=8,warning=F}
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA3')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA3'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Sa 3.0s, g')
+  m 
+```
+
+# Event total ground up loss splits 
+
+## Ground up loss by peril
+
+```{r GUByPeril,echo=FALSE,include=FALSE}
+Total.GU <- EQsim.data[,sum(GU.SHK.A+GU.SHK.C+GU.SHK.D+
+                            GU.TSU.A+GU.TSU.C+GU.TSU.D+
+                            GU.LIQ.A+GU.LIQ.C+GU.LIQ.D)]
+
+out.tb <- EQsim.data[,.(GU.SHK=sum(GU.SHK.A+GU.SHK.C+GU.SHK.D),
+                        GU.TSU=sum(GU.TSU.A+GU.TSU.C+GU.TSU.D),
+                        GU.LIQ=sum(GU.LIQ.A+GU.LIQ.C+GU.LIQ.D)),by = EventID]
+out.tb[,':='(SHK = out.tb$GU.SHK / Total.GU,
+             TSU = out.tb$GU.TSU / Total.GU,
+             LIQ = out.tb$GU.LIQ / Total.GU)] 
+write.csv(out.tb,file = file.path(getwd(), 'R.output',
+                                  paste0(event.name,'.GU.by.peril',today,'.csv')))
+temp <- out.tb[,.(EventID,GU.SHK,GU.TSU,GU.LIQ)]
+temp[,':='(SHK=GU.SHK /  million,
+          TSU=GU.TSU / million,
+          LIQ=GU.LIQ / million)]
+DT <- as.data.table(melt(temp,id.vars = 'EventID', 
+           measure.vars = c('SHK','LIQ','TSU'),
+           variable.name = 'Peril',
+           value.name = 'GU.mUSD'))
+DT$Peril <- factor(DT$Peril,levels=c('SHK','LIQ','TSU'))
+```
+
+```{r GUByPeril_PieChart, fig.width=5,fig.height=5}
+ggplot(DT, aes(x = "", y = GU.mUSD, fill = Peril))+
+  geom_bar(width=1, stat='identity')+
+  coord_polar(theta = "y")+
+  labs(title = event.name,x='',y='Ground up loss, mUSD')
+```
+
+For earthquake **`r event.name`**, the total ground up loss 
+is **`r formatC(Total.GU/million,format='f',digits=0,big.mark=',')`** million USD,
+by running EQSim using `r IED.version` IED. The ground up loss splits by peril are:
+
+* shake: `r paste0(formatC(100 * (out.tb$SHK),format='f',digits=0),'%')` 
+* liquefaction: `r paste0(formatC(100*out.tb$LIQ,format='f',digits=0), '%')` 
+* tsunami: `r paste0(formatC(100*out.tb$TSU,format='f',digits=0), '%')` 
+
+## Ground up loss by coverage
+
+```{r GU.By.coverage, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(bldg.GU = sum(GU.SHK.A+GU.LIQ.A+GU.TSU.A),
+                        cont.GU = sum(GU.SHK.C+GU.LIQ.C+GU.TSU.C),
+                        time.GU = sum(GU.SHK.D+GU.LIQ.D+GU.TSU.D)), by = EventID]
+out.tb[,':='(Bldg = bldg.GU/Total.GU,
+             Cont = cont.GU/Total.GU,
+             Time = time.GU/Total.GU)]
+write.csv(out.tb, file = file.path(getwd(),'R.output',
+                                   paste0(event.name,'.GU.by.coverage',today,'.csv')))
+
+DT <- data.frame(GU.mUSD = c(out.tb$bldg.GU /  million,
+                             out.tb$cont.GU / million,
+                             out.tb$time.GU / million),
+                 Coverage = c('bldg','cont','time'))
+DT$Coverage <- factor(DT$Coverage, levels=c('bldg','cont','time'), ordered = T)
+```
+
+```{r GU.By.coverage_PieChart, fig.width=5,fig.height=5}
+ggplot(DT, aes(x = "", y = GU.mUSD, fill = Coverage))+
+  geom_bar(width=1, stat='identity')+
+  coord_polar(theta = "y")+
+  labs(title = event.name,x='',y='Ground up loss, mUSD')+
+  scale_fill_manual(values=c('#105984','#C6DB42','#39BEB5'))
+```
+
+For earthquake **`r event.name`**, the total ground 
+up loss is **`r formatC(Total.GU/million,format='f',digits=0,big.mark=',')`** million USD,
+by running EQSim using `r IED.version` IED. The ground up loss splits by coverage are:
+
+* building: `r paste0(formatC(100 * out.tb$Bldg, format='f',digits=0), '%')` 
+* content : `r paste0(formatC(100*out.tb$Cont,format='f',digits=0), '%')` 
+* time: `r paste0(formatC(100*out.tb$Time,format='f',digits=0), '%')` 
+
+Sum up the ground up losses and 
+total replacement values on an affected IED grid. The 
+mean damage ratio is calculated by dividing the
+total loss by the total replacement
+value.
+
+```{r MDR.By.Coverage, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(bldg.GU = sum(GU.SHK.A+GU.LIQ.A+GU.TSU.A),
+                        cont.GU = sum(GU.SHK.C+GU.LIQ.C+GU.TSU.C),
+                        time.GU = sum(GU.SHK.D+GU.LIQ.D+GU.TSU.D)), by = .(GridID=locationID)]
+IED.RV <- IED[,.(bldg.RV = sum(RVA),
+                 cont.RV = sum(RVC),
+                 time.RV = sum(RVD)),by=GridID]
+setkey(out.tb, GridID)
+setkey(IED.RV, GridID)
+affected.grids <- IED.RV[out.tb,]
+out.tb <- affected.grids[,.(bldg.GU = sum(bldg.GU),bldg.RV = sum(bldg.RV),
+                            cont.GU = sum(cont.GU),cont.RV = sum(cont.RV),
+                            time.GU = sum(time.GU),time.RV = sum(time.RV))]
+out.tb[,':='(bldg.MDR = bldg.GU / bldg.RV,
+             cont.MDR = cont.GU / cont.RV,
+             time.MDR = time.GU / time.RV)]
+rm(affected.grids, IED.RV)
+write.csv(out.tb, 
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.SHK.MDR.by.coverage.',today,'.csv')))
+DT <- data.frame(MDR = c(out.tb$bldg.MDR,
+                             out.tb$cont.MDR,
+                             out.tb$time.MDR),
+                 Coverage = c('bldg','cont','time'))
+DT$Coverage <- factor(DT$Coverage, levels=c('bldg','cont','time'), ordered = T)
+```
+
+```{r MDR.By.Coverage.BarChart, fig.width=5,fig.height=5}
+ggplot(DT, aes(x = Coverage, y = MDR))+
+  geom_bar(stat='identity', fill = '#8CC63F', colour = 'white')+
+  labs(title = event.name,x='',y='Mean damage raio')
+```
+
+## Ground up loss by State
+
+```{r GU.By.STATE, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(GU.SHK.A+GU.SHK.C+GU.SHK.D+
+                               GU.TSU.A+GU.TSU.C+GU.TSU.D+
+                               GU.LIQ.A+GU.LIQ.C+GU.LIQ.D)),by = str.IED.STATE]
+setkey(out.tb, str.IED.STATE)
+# STATE.table is loaded in 'LoadSTATETable' section
+out.tb <- STATE.table[out.tb,.(Name,num.STATE,GU,str.IED.STATE)]
+out.tb[, STATE.share := GU / Total.GU]
+out.tb <- out.tb[order(-1*GU),]
+write.csv(out.tb,
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.GU.by.STATE.',today,'.csv')))
+count <- min(c(5,nrow(out.tb)))
+```
+
+Out of **`r length(unique(STATE.table$str.STATE))`**  STATEs,
+the top `r count` damaged STATE are listed below.
+
+```{r GU.by.STATE.table, echo=F,results='asis'}
+pandoc.table(as.data.frame(out.tb[1:count, .(Name, STATE.ID=str.IED.STATE, 
+GU.mUSD = GU/million, GU.pct = round(STATE.share*100))]), style='rmarkdown')
+```
+
+```{r GU.by.STATE.map.prepare, echo = FALSE, include =FALSE}
+att.tb <- STATE.shp@data 
+GU.loss <- rep(0,nrow(att.tb))
+for(i in 1:nrow(out.tb))
+{
+  indx <- which(att.tb$strSTATE == out.tb$str.IED.STATE[i])
+  GU.loss[indx] <- out.tb$GU[i]
+}
+att.tb <- cbind(att.tb, GU.loss)
+original.STATE.shp <- STATE.shp
+STATE.shp@data <- att.tb #replace original attribute table with updated one
+STATE.shp <- STATE.shp[which(STATE.shp$GU.loss>0),]
+writeOGR(STATE.shp,dsn=file.path(getwd(),'maps'),
+         layer = paste0(event.name,'.GU.by.STATE.',today),
+         overwrite_layer = T,driver='ESRI Shapefile')
+```
+
+```{r GU.by.STATE.map.plot,fig.width=12,fig.height=8,warning = FALSE}
+m <- leaflet()
+m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                      group = 'Toner Lite')
+m <- addTiles(map = m, group = 'OSM')
+m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+pal <- colorBin(palette = c("#E7E742","#E72C29"), 
+                domain = range(STATE.shp$GU.loss), bins = 5)
+m <- addPolygons(map=m, data=STATE.shp, 
+                 color = pal(STATE.shp$GU.loss), 
+                 fill = TRUE, weight = 2, fillOpacity = 0.5, 
+                 group = "GUL", 
+                 popup = paste(STATE.shp$NAME, " GUL: mUSD", 
+                               paste0(formatC(STATE.shp$GU.loss/million,big.mark=',',format='f',digits=0))))
+m <- addPolygons(map=m, data=original.STATE.shp, 
+                 color = "green", fill = FALSE, 
+                 weight = 1, fillOpacity = 1, group = "STATE")
+m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                      overlayGroups = c("GUL", "STATE"),
+                      options = layersControlOptions(collapsed = FALSE))
+
+m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+m <- addLegend(map = m, 
+               position = "bottomleft", pal = pal, 
+               values = range(STATE.shp$GU.loss), opacity = 1,
+               title = 'GU, USD')
+
+m 
+```
+
+# Shake loss distributions
+
+## Shake loss map 
+
+```{r SHK.GU.by.Grid.prepare, echo = FALSE, include =FALSE}
+SHK.loss <- F
+SHK.GU.dt <- EQsim.data[,.(GU = sum(GU.SHK.A+GU.SHK.C+GU.SHK.D),
+                           GU.A = sum(GU.SHK.A),
+                        Lat = min(Lat), Lon = min(Lon)),by=.(locationID)]
+SHK.GU.dt <- SHK.GU.dt[GU > 0, ]
+SHK.GU.dt[, GU.mUSD := GU / million]
+if(sum(SHK.GU.dt$GU.mUSD) > 0)
+{
+  SHK.loss <- T
+  LongMin <- floor(min(SHK.GU.dt$Lon))
+  LongMax <- ceiling(max(SHK.GU.dt$Lon))
+  LatMin <- floor(min(SHK.GU.dt$Lat))
+  LatMax <- ceiling(max(SHK.GU.dt$Lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  grid.ctr <- SHK.GU.dt[,.(Lon,Lat)]
+  rst <- rasterize(grid.ctr, background, fun = sum,
+                   field = SHK.GU.dt[,.(GU.mUSD)])
+  writeRaster(rst, filename = file.path(getwd(),'maps',
+                                        paste0(event.name,'.SHK.GU.mUSD.',today,'.img')),
+           format = 'HFA',overwrite = T)
+  Grid.RV <- IED[,.(RV.A = sum(RVA)), keyby = GridID]
+  setkey(SHK.GU.dt, locationID)
+  SHK.GU.dt <- Grid.RV[SHK.GU.dt,]
+  SHK.GU.dt[,CovA.MDR := GU.A / RV.A]
+  MDR.rst <- rasterize(grid.ctr,background,fun=mean,
+                       field = SHK.GU.dt[,.(CovA.MDR)])
+  writeRaster(MDR.rst, filename = file.path(getwd(),'maps',
+                                        paste0(event.name,'.SHK.CovA.MDR.',today,'.img')),
+           format = 'HFA',overwrite = T)
+}
+```
+
+Total ground up loss due to ground shaking is 
+`r paste0(formatC(sum(SHK.GU.dt$GU.mUSD),format='f',big.mark=',',digits=0))` million USD.
+Shake loss is total ground up,  including building, content and business
+interruption losses. Mean damage ratio shown in the map is for building damage only.
+It is calculated by the following equation for each 1km grid.
+
+$$\frac{Total CovA GU loss}{Total CovA Rep Value}$$
+
+```{r SHK.GU.by.GRID.map,fig.width=12,fig.height=8,warning = FALSE}
+if(SHK.loss)
+{
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  pal <- colorBin(palette = c("#EDE700","#77A226"), domain = range(SHK.GU.dt$GU.mUSD), bins = 5)
+  m <- addRasterImage(map=m, rst, colors = pal, opacity = 0.5, group = "SHK.GU")
+
+  MDR.pal <- colorBin(palette = c("#85D2F5","#F33717"), domain = range(SHK.GU.dt$CovA.MDR), bins = 5)
+  m <- addRasterImage(map=m, MDR.rst, colors = MDR.pal, opacity = 0.5, group = "CovA.MDR")
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c("SHK.GU",'CovA.MDR'),
+                        options = layersControlOptions(collapsed = FALSE))
+  
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = MDR.pal, 
+                 values = range(SHK.GU.dt$CovA.MDR), opacity = 1,
+                 title = 'Mean damage ratio')
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(SHK.GU.dt$GU.mUSD), opacity = 1,
+                 title = 'GU, mUSD')
+  
+  m 
+}
+```
+
+## Shake ground up loss by height
+
+Total ground up loss (buidling + content + time) caused by ground shaing
+is aggregated by building height.
+
+```{r SHK.GU.By.Height, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(GU.SHK.A+GU.SHK.C+GU.SHK.D)),by = Height]
+write.csv(out.tb[order(-1*GU),],
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.SHK.GU.by.height.',today,'.csv')))
+
+out.tb[,GU.mUSD:=GU/million]
+out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+```
+```{r SHK.GU.By.Height.PieChart, fig.width=7,fig.height=5}
+ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = Height))+
+  geom_bar(stat='identity',width = 1)+
+  coord_polar(theta= 'y')+
+  scale_fill_manual(values=c('#A9C0DC','#6599CB','#0777B5','#0D639B'))+
+  labs(title = event.name,x='',y='Shake ground up loss, mUSD')
+```
+```{r SHK.MDR.By.Height, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(GU.SHK.A+GU.SHK.C+GU.SHK.D)),by = .(GridID = locationID,Height)]
+
+Grid.RV <- IED[,.(RV=sum(RVA+RVC+RVD)),by=.(GridID,Height)]
+setkey(out.tb, GridID, Height)
+setkey(Grid.RV, GridID, Height)
+affected.grids <- Grid.RV[out.tb,]
+out.tb <- affected.grids[,.(RV = sum(RV), GU = sum(GU)), by = Height]
+out.tb[,MDR := GU / RV]
+out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+write.csv(out.tb, 
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.SHK.MDR.by.Height.',today,'.csv')))
+```
+```{r SHK.MDR.By.Height.BarChart, fig.width=6,fig.height=5}
+ggplot(out.tb, aes(x = Height, y = MDR ))+
+  geom_bar(stat='identity',colour='white',fill='#8CC63F')+
+  labs(title = event.name,x='Height',y='Shake MDR')+
+  coord_flip()
+```
+
+## Shake ground up loss by line of business
+
+
+Total ground up loss (buidling + content + time) caused by ground shaing
+is aggregated by line of business. 
+
+```{r SHK.GU.By.LOB, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(GU.SHK.A+GU.SHK.C+GU.SHK.D)),by = BC]
+write.csv(out.tb[order(-1*GU),],
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.SHK.GU.by.LOB.',today,'.csv')))
+
+out.tb[,GU.mUSD:=GU/million]
+```
+```{r SHK.GU.By.LOB.PieChart, fig.width=7,fig.height=5}
+ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = BC))+
+  geom_bar(stat='identity',width = 1)+
+  coord_polar(theta= 'y')+
+  labs(title = event.name,x='',y='Shake ground up loss, mUSD')
+```
+```{r SHK.MDR.By.LOB, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(GU.SHK.A+GU.SHK.C+GU.SHK.D)),by = .(GridID = locationID,BC)]
+Grid.RV <- IED[,.(RV = sum(RVA+RVC+RVD)), by = .(GridID,BC)]
+setkey(Grid.RV, GridID, BC)
+setkey(out.tb, GridID, BC)
+affected.grids <- Grid.RV[out.tb,]
+out.tb <- affected.grids[,.(GU = sum(GU), RV = sum(RV)), by = BC]
+out.tb[,MDR:=GU/RV]
+write.csv(out.tb, 
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.SHK.MDR.by.LOB.',today,'.csv')))
+```
+```{r SHK.MDR.By.LOB.BarChart, fig.width=5,fig.height=3.5}
+ggplot(out.tb, aes(x = BC, y = MDR))+
+  geom_bar(stat='identity',colour='white',fill='#8CC63F')+
+  labs(title = event.name,x='Line of business',y='Shake MDR')
+```
+
+## Shake ground up loss by construction
+
+Total ground up loss caused by ground shaing
+is aggregated by construction type and coverage. 
+
+
+```{r SHK.GU.By.CC, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(SHK.bldg=sum(GU.SHK.A),
+                        SHK.cont=sum(GU.SHK.C),
+                        SHK.time=sum(GU.SHK.D)),by = CC]
+write.csv(out.tb[order(-1*SHK.bldg),],
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.SHK.GU.by.CC.',today,'.csv')))
+
+DT <- melt(out.tb,id.vars = 'CC', variable.name = 'Coverage', value.name = 'GU.mUSD')
+DT[,GU.mUSD := GU.mUSD / million]
+```
+```{r SHK.GU.By.CC.BarChart, fig.width=8,fig.height=5}
+ggplot(DT, aes(x = factor(CC), y = GU.mUSD))+
+  geom_bar(stat='identity',colour='white',fill='#8CC63F')+ facet_grid(Coverage ~ .)+
+  labs(title = event.name,x='Construction',y='Ground up loss, mUSD')+
+  scale_y_continuous(labels=comma)
+```
+```{r SHK.MDR.By.CC, include = FALSE, echo=FALSE}
+# split by construction (damage ratio)
+out.tb <- EQsim.data[,.(SHK.bldg=sum(GU.SHK.A),
+                        SHK.cont=sum(GU.SHK.C),
+                        SHK.time=sum(GU.SHK.D)),by = .(CC,GridID=locationID)]
+setkey(out.tb, CC, GridID)
+CC.GridID.RV <- IED[,.(bldg.RV = sum(RVA),
+                       cont.RV = sum(RVC),
+                       time.RV = sum(RVD)),by=.(CC,GridID)]
+setkey(CC.GridID.RV, CC, GridID)
+# Get RV on affected grids
+RV.affected.grids <- CC.GridID.RV[out.tb,]
+out.tb <- RV.affected.grids[,.(bldg.GU = sum(SHK.bldg),
+                               bldg.RV = sum(bldg.RV),
+                               cont.GU = sum(SHK.cont),
+                               cont.RV = sum(cont.RV),
+                               time.GU = sum(SHK.time),
+                               time.RV = sum(time.RV)),by = CC]
+out.tb[,':='(bldg.MDR = bldg.GU / bldg.RV,
+             cont.MDR = cont.GU / cont.RV,
+             time.MDR = time.GU / time.RV)]
+write.csv(out.tb, 
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.SHK.MDR.by.CC.','.csv')))
+rm(RV.affected.grids, CC.GridID.RV)
+DT <- melt(out.tb, id.vars = 'CC', measure.vars = c('bldg.MDR',
+                                                    'cont.MDR',
+                                                    'time.MDR'),
+           variable.name = 'Coverage', value.name = 'MDR')
+```
+```{r SHK.MDR.By.CC.BarChart, fig.width=8,fig.height=5}
+ggplot(DT, aes(x = factor(CC), y = MDR))+
+  geom_bar(stat='identity',colour='white',fill='#8CC63F')+ facet_grid(Coverage ~ .)+
+  labs(title = event.name,x='Construction',y='Mean damage raio')
+```
+
+## Shake ground up loss by occupancy
+
+
+Total ground up loss caused by ground shaing
+is aggregated by occupancy type and coverage. 
+
+
+```{r SHK.GU.By.OCC, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(SHK.bldg=sum(GU.SHK.A),
+                        SHK.cont=sum(GU.SHK.C),
+                        SHK.time=sum(GU.SHK.D)),by = OCC]
+write.csv(out.tb[order(-1*SHK.bldg),],
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.SHK.GU.by.OCC.','.csv')))
+
+DT <- melt(out.tb,id.vars = 'OCC', variable.name = 'Coverage', value.name = 'GU.mUSD')
+DT[,GU.mUSD := GU.mUSD / million]
+```
+```{r SHK.GU.By.OCC.BarChart, fig.width=8,fig.height=5}
+ggplot(DT, aes(x = factor(OCC), y = GU.mUSD))+
+  geom_bar(stat='identity',colour='white',fill='#8CC63F')+ facet_grid(Coverage ~ .)+
+  labs(title = event.name,x='Occupancy',y='Ground up loss, mUSD')+
+  scale_y_continuous(labels=comma)
+```
+```{r SHK.MDR.By.OCC, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(SHK.bldg=sum(GU.SHK.A),
+                        SHK.cont=sum(GU.SHK.C),
+                        SHK.time=sum(GU.SHK.D)),by = .(OCC,GridID=locationID)]
+setkey(out.tb, OCC, GridID)
+OCC.GridID.RV <- IED[,.(bldg.RV = sum(RVA),
+                       cont.RV = sum(RVC),
+                       time.RV = sum(RVD)),by=.(OCC,GridID)]
+setkey(OCC.GridID.RV, OCC, GridID)
+# Get RV on affected grids
+RV.affected.grids <- OCC.GridID.RV[out.tb,]
+out.tb <- RV.affected.grids[,.(bldg.GU = sum(SHK.bldg),
+                               bldg.RV = sum(bldg.RV),
+                               cont.GU = sum(SHK.cont),
+                               cont.RV = sum(cont.RV),
+                               time.GU = sum(SHK.time),
+                               time.RV = sum(time.RV)),by = OCC]
+out.tb[,':='(bldg.MDR = bldg.GU / bldg.RV,
+             cont.MDR = cont.GU / cont.RV,
+             time.MDR = time.GU / time.RV)]
+write.csv(out.tb, file = file.path(getwd(), 'R.output',
+                                   paste0(event.name,'.SHK.MDR.by.OCC.',today,'.csv')))
+rm(OCC.GridID.RV,RV.affected.grids)
+DT <- melt(out.tb, id.vars = 'OCC', measure.vars = c('bldg.MDR',
+                                                    'cont.MDR',
+                                                    'time.MDR'),
+           variable.name = 'Coverage', value.name = 'MDR')
+```
+```{r SHK.MDR.By.OCC.BarChart, fig.width=8,fig.height=5}
+ggplot(DT, aes(x = factor(OCC), y = MDR))+
+  geom_bar(stat='identity',colour='white',fill='#8CC63F')+ facet_grid(Coverage ~ .)+
+  labs(title = event.name,x='Occupancy',y='Mean damage raio')
+```
+
+## Shake ground up loss distribution by ground motion intensity
+```{r SHK.Loss.By.SA03, include = FALSE, echo=FALSE}
+bin.edges <- c(0, 0.02, 0.04, 0.06, 0.1, 0.15, 0.2,0.25,0.3,0.4,0.5,0.6,0.8,1.0,1.5,100) 
+GM.levels <- c(paste0('< ' ,bin.edges[2],' g'),
+               paste0(bin.edges[2:(length(bin.edges)-2)],' - ',
+                                bin.edges[3:(length(bin.edges)-1)]),
+               paste0('> ',bin.edges[length(bin.edges)-1],' g'))
+# assign intensity level to EQsim.data
+low.rise.loss <- EQsim.data[Height == height.band.names[1], .(SA03,GU.SHK.A)]
+low.rise.loss[SA03 == bin.edges[1],GM.level := GM.levels[1]]
+for(i in 2:length(bin.edges))
+{
+  low.rise.loss[SA03 <= bin.edges[i] & 
+             SA03 > bin.edges[i-1] ,GM.level := GM.levels[i-1]]
+}
+low.rise.loss$GM.level <- factor(low.rise.loss$GM.level, levels=GM.levels, ordered = T)
+DT <- low.rise.loss[,.(GU = sum(GU.SHK.A)), keyby = GM.level]
+Total.SHK.GU.Bldg <- sum(DT$GU)
+DT[,Prob := GU / Total.SHK.GU.Bldg]
+DT[,cum.prob := cumsum(Prob)]
+write.csv(DT, file = file.path(getwd(), 'R.output', 
+                               paste0(event.name,'.Low-rise.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
+```
+```{r SHK.Loss.By.SA03.BarChart, fig.width = 12, fig.height = 3}
+ggplot(DT, aes(x = GM.level, y = Prob))+
+  geom_bar(stat = 'identity',width = 0.2,fill='#8CC63F',colour='white') + 
+  labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'Loss contribution')
+
+```
+```{r SHK.Loss.By.SA1, include = FALSE, echo=FALSE}
+bldg.Total.SHK.GU <- sum(EQsim.data$GU.SHK.A)
+mid.rise.loss <- EQsim.data[Height == height.band.names[2], .(SA1,GU.SHK.A)]
+bldg.mid.rise.SHK.GU <- sum(mid.rise.loss$GU.SHK.A)
+decent.mid.rise.loss <- F
+if(bldg.mid.rise.SHK.GU / bldg.Total.SHK.GU > 0.1)
+{
+  # if mid rise building contribute more than 10% total loss
+  # take a look at mid-rise distribution
+  decent.mid.rise.loss <- T
+  bin.edges <- c(0, 0.02, 0.04, 0.06, 0.1, 0.15, 0.2,0.25,0.3,0.4,0.5,0.6,0.8,1.0,1.5,100) 
+  GM.levels <- c(paste0('< ' ,bin.edges[2],' g'),
+                 paste0(bin.edges[2:(length(bin.edges)-2)],' - ',
+                        bin.edges[3:(length(bin.edges)-1)]),
+                 paste0('> ',bin.edges[length(bin.edges)-1],' g'))
+  # assign intensity level to EQsim.data
+  mid.rise.loss[SA1 == bin.edges[1], GM.level := GM.levels[1]]
+  for(i in 2:length(bin.edges))
+  {
+    mid.rise.loss[SA1 <= bin.edges[i] & 
+                  SA1 > bin.edges[i-1] ,GM.level := GM.levels[i-1]]
+  }
+  mid.rise.loss$GM.level <- factor(mid.rise.loss$GM.level, levels=GM.levels)
+  DT <- mid.rise.loss[,.(GU = sum(GU.SHK.A)), by = GM.level]
+  Total.SHK.GU.Bldg <- sum(DT$GU)
+  DT[,Prob := GU / Total.SHK.GU.Bldg]
+  write.csv(DT, file = file.path(getwd(), 'R.output', 
+                                 paste0(event.name,'.Mid-rise.Bldg.SHK.GU.distribution.by.Sa1.',today,'.csv')))
+}
+```
+```{r SHK.Loss.By.SA1.BarChart, fig.width = 12, fig.height = 3}
+if(decent.mid.rise.loss)
+{
+  ggplot(DT, aes(x = GM.level, y = Prob))+
+    geom_bar(stat = 'identity',width = 0.2,colour='white',fill='#8CC63F') + 
+    labs(title = 'Shake mid-rise building loss distribution', x = 'Sa 1.0 sec, g', y = 'Loss contribution')
+}
+```
+## Shake Content Loss Distribution 
+
+```{r SHK.Cont.by.H.prepare,include=F,echo=F}
+temp <- EQsim.data[,.(cont.GU=sum(GU.SHK.C)),keyby=Height]
+temp[,cont.GU:=cont.GU/million]
+temp$Height <- factor(temp$Height, levels=height.band.names, ordered=T)
+```
+
+```{r SHK.cont.GU.By.Height, fig.width=7,fig.height=5}
+ggplot(temp, aes(x = "", y = cont.GU, fill = Height))+
+  geom_bar(stat='identity',width = 1)+
+  coord_polar(theta= 'y')+
+  scale_fill_manual(values=c('#A9C0DC','#6599CB','#0777B5','#0D639B'))+
+  labs(title = event.name,x='',y='Shake Content Ground Up Loss, mUSD')
+```
+
+### Low-rise Building Content Loss Distirubiont by Building Damage
+
+```{r LR.Cont.by.bldg.prepare, include = FALSE, echo=FALSE}
+bin.edges <- c(seq(0,0.1,by=0.01),
+          seq(0.12, 0.5,by=0.02),
+          seq(0.6,1.0,by=0.1))
+num.bin.edges <- length(bin.edges)
+bin.centers <- bin.edges[-1] - diff(bin.edges)
+bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
+bins <- data.frame(bin.names, bin.centers)
+
+cont.damage <- EQsim.data[Height == height.band.names[1],.(SA03,SHK.MDR.A,SHK.MDR.C,GU.SHK.C)]
+total.cont.loss <- cont.damage[,sum(GU.SHK.C)]
+if(total.cont.loss>0){
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SHK.MDR.A >= low.bound & SHK.MDR.A < up.bound, bldg.damage := bin.names[i]]
+  }
+  cont.damage[SHK.MDR.A == bin.edges[length(bin.edges)], bldg.damage := bin.names[length(bin.names)]]
+  cont.damage$bldg.damage <- factor(cont.damage$bldg.damage, levels = bin.names, ordered = T)
+  out.tb <- cont.damage[, .(GUC = sum(GU.SHK.C)), keyby = bldg.damage]
+  out.tb[, GUC.pct := GUC / total.cont.loss]
+  out.tb[, GUC.CDF := cumsum(GUC.pct)]
+  bldg.damage.ratio <- bins$bin.centers[match(out.tb$bldg.damage, bins$bin.names)]
+  temp <- data.frame(bldg.MDR=bldg.damage.ratio,
+                     probability = out.tb$GUC.CDF)
+}
+```
+
+```{r LR.Cont.CovAMDR.PMF, fig.width = 10, fig.height = 6, results='asis'}
+if(total.cont.loss>0){
+ggplot(out.tb,aes(x=bldg.damage,y=GUC.pct))+
+  geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+  coord_flip()+labs(x='Building damage ratio',y='Contribution',
+                    title = paste0(event.name,'\n Low-rise Content Loss \n Distribution by Building Damage'))
+}else{
+  cat('<span style="color:red">No shake content loss from low rise building.</span>')
+}
+```
+
+```{r LR.Cont.CovAMDR.CDF, fig.width = 10, fig.height = 6}
+if(total.cont.loss>0){
+ggplot(temp,aes(x=bldg.MDR, y=probability))+
+  geom_line(colour='darkgreen')+geom_point()+coord_flip()+
+  labs(x='Building damage ratio',y='CumuSum of Contribution',
+                    title = paste0(event.name,'\n Low-rise Content Loss \n Distribution by Building Damage'))
+}
+```
+
+### Low-rise Building Content Loss Distirubiont by Sa 0.3s
+
+```{r LR.Cont.by.Sa03.prepare, include = FALSE, echo=FALSE}
+if(total.cont.loss>0){
+  bin.edges <- c(seq(0,0.2,by=0.01),
+            seq(0.22, 0.4, by = 0.02),
+            seq(0.5, 1.0, by = 0.1),
+            seq(1.2, 5, by = 0.2), 10)
+  bin.centers <- bin.edges[-1] - diff(bin.edges)
+  num.bin.edges <- length(bin.edges)
+  bin.names <- c(paste0('< ', bin.edges[2]),
+                 paste0(bin.edges[2:(num.bin.edges-2)], ' - ', 
+                        bin.edges[3:(num.bin.edges-1)]),
+                 paste0('> ', bin.edges[num.bin.edges-1]))
+  bins <- data.frame(bin.names, bin.centers)
+
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SA03 >= low.bound & SA03 < up.bound, Sa03.range := bin.names[i]]
+  }
+  cont.damage$Sa03.range <- factor(cont.damage$Sa03.range, levels = bin.names, ordered = T)
+  out.tb <- cont.damage[, .(GUC = sum(GU.SHK.C)), keyby = Sa03.range]
+  out.tb[, GUC.pct := GUC / total.cont.loss]
+  out.tb <- out.tb[order(Sa03.range),]
+  out.tb[, GUC.CDF := cumsum(GUC.pct)]
+  Sa03 <- bins$bin.centers[match(out.tb$Sa03.range, bins$bin.names)]
+  temp <- data.frame(Sa03=Sa03, probability = out.tb$GUC.CDF)
+}
+```
+```{r LR.Cont.by.SA03.PMF, fig.width = 10, fig.height = 6}
+if(total.cont.loss>0){
+  ggplot(out.tb,aes(x=Sa03.range,y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    coord_flip()+labs(x='Sa 0.3s, g',y='Contribution',
+                      title = paste0(event.name, '\n Low-rise Content Loss \n Distribution by Sa 0.3s'))
+}
+```
+
+```{r LR.Cont.by.SA03.CDF, fig.width = 10, fig.height = 6}
+if(total.cont.loss>0){
+    ggplot(temp,aes(x=Sa03, y=probability))+
+      geom_line(colour='darkgreen')+geom_point()+
+      coord_flip()+labs(x='Sa 0.3s, g',y='CumuSum of Contribution',
+                        title = paste0(event.name, '\n Low-rise Content Loss \n Distribution by Sa 0.3s'))
+}
+```
+
+### Mid-rise Building Content Loss Distirubiont by Building Damage
+
+```{r MR.Cont.by.Bldg.prepare, include = FALSE, echo=FALSE}
+bin.edges <- c(seq(0,0.1,by=0.01),
+          seq(0.12, 0.5,by=0.02),
+          seq(0.6,1.0,by=0.1))
+num.bin.edges <- length(bin.edges)
+bin.centers <- bin.edges[-1] - diff(bin.edges)
+bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
+bins <- data.frame(bin.names, bin.centers)
+cont.damage <- EQsim.data[Height == height.band.names[2],.(SA1,SHK.MDR.A,SHK.MDR.C,GU.SHK.C)]
+total.cont.loss <- cont.damage[,sum(GU.SHK.C)]
+if(total.cont.loss>0){
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SHK.MDR.A >= low.bound & SHK.MDR.A < up.bound, bldg.damage := bin.names[i]]
+  }
+  cont.damage[SHK.MDR.A == bin.edges[length(bin.edges)], bldg.damage := bin.names[length(bin.names)]]
+
+  cont.damage$bldg.damage <- factor(cont.damage$bldg.damage, levels = bin.names, ordered = T)
+  out.tb <- cont.damage[, .(GUC = sum(GU.SHK.C)), keyby = bldg.damage]
+  out.tb[, GUC.pct := GUC / total.cont.loss]
+  out.tb[, GUC.CDF := cumsum(GUC.pct)]
+  bldg.damage.ratio <- bins$bin.centers[match(out.tb$bldg.damage, bins$bin.names)]
+  temp <- data.frame(bldg.MDR=bldg.damage.ratio,
+                     probability = out.tb$GUC.CDF)
+}
+```
+```{r MR.Cont.by.bldg.PMF, fig.width = 10, fig.height = 6, results = 'asis'}
+if(total.cont.loss>0){
+  ggplot(out.tb,aes(x=bldg.damage,y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    coord_flip()+labs(x='Building damage ratio',y='Contribution',
+                      title = paste0(event.name, '\n Mid-rise Content Loss \n Distribution by Building Damage'))
+}else{
+  cat('<span style="color:red">No shake content loss is from mid-rise building.</span>')
+}
+```
+
+```{r MR.Cont.by.bldg.CDF, fig.width = 10, fig.height = 6}
+if(total.cont.loss>0){
+    ggplot(temp,aes(x=bldg.MDR, y=probability))+
+      geom_line(colour='darkgreen')+geom_point()+coord_flip()+
+      labs(x='Building damage ratio',y='CumuSum of Contribution',
+           title = paste0(event.name, '\n Mid-rise Content Loss \n Distribution by Building Damage'))
+}
+```
+
+### Mid-rise Building Content Loss Distirubiont by Sa 1.0s
+
+```{r MR.cont.by.sa1.prepare,include=F,echo=F}
+# Content Distribution by Sa1.0 bins
+if(total.cont.loss){
+  bin.edges <- c(seq(0,0.2,by=0.01),
+            seq(0.22, 0.4, by = 0.02),
+            seq(0.5, 1.0, by = 0.1),
+            seq(1.2, 2, by = 0.2), 10)
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - diff(bin.edges)
+  bin.names <- c(paste0('< ',bin.edges[2]),
+                 paste0(bin.edges[2:(num.bin.edges-2)], ' - ', bin.edges[3:(num.bin.edges-1)]),
+                 paste0('> ',bin.edges[num.bin.edges-1]))
+
+  bins <- data.frame(bin.names, bin.centers)
+  plot.unit <- 'in'
+  plot.width <- 6
+  plot.height <- 6
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SA1 >= low.bound & SA1 < up.bound, Sa1.range := bin.names[i]]
+  }
+  cont.damage[SA1 == bin.edges[length(bin.edges)], Sa1.range := bin.names[length(bin.names)]]
+
+  cont.damage$Sa03.range <- factor(cont.damage$Sa1.range, 
+                                   levels = bin.names, ordered = T)
+  out.tb <- cont.damage[, .(GUC = sum(GU.SHK.C)), keyby = Sa1.range]
+  out.tb[, GUC.pct := GUC / total.cont.loss]
+  out.tb <- out.tb[order(Sa1.range),]
+  out.tb[, GUC.CDF := cumsum(GUC.pct)]
+  Sa1 <- bins$bin.centers[match(out.tb$Sa1.range, bins$bin.names)]
+  temp <- data.frame(Sa1=Sa1, probability = out.tb$GUC.CDF)
+}
+```
+
+```{r MR.cont.by.sa1.PMF,fig.width=10,fig.height=6}
+if(total.cont.loss>0){
+  ggplot(out.tb,aes(x=Sa1.range,y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    coord_flip()+labs(x='Sa 1.0s, g',y='Contribution',
+                      title = paste0(event.name,'\n Mid-rise Content Loss \n Distribution by Sa 1.0s'))
+
+}
+```
+
+```{r MR.cont.by.sa1.CDF,fig.width=10,fig.height=6}
+if(total.cont.loss>0){
+    ggplot(temp,aes(x=Sa1, y=probability))+
+      geom_line(colour='darkgreen')+geom_point()+
+      coord_flip()+labs(x='Sa 1.0s, g',y='CumuSum of Contribution',
+                        title = paste0(event.name,'\n Mid-rise Content Loss \n Distribution by Sa 1.0s'))
+}
+```
+
+### High-rise Building Content Loss Distirubiont by Building Damage
+
+```{r HR.cont.by.bldg.prepare, include=F, echo=F}
+bin.edges <- c(seq(0,0.1,by=0.01),
+          seq(0.12, 0.5,by=0.02),
+          seq(0.6,1.0,by=0.1))
+num.bin.edges <- length(bin.edges)
+bin.centers <- bin.edges[-1] - diff(bin.edges)
+bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
+bins <- data.frame(bin.names, bin.centers)
+
+cont.damage <- EQsim.data[Height == height.band.names[3], .(SA2,SHK.MDR.A,SHK.MDR.C,GU.SHK.C)]
+total.cont.loss <- cont.damage[,sum(GU.SHK.C)]
+if(total.cont.loss>0){
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SHK.MDR.A >= low.bound & SHK.MDR.A < up.bound, bldg.damage := bin.names[i]]
+  }
+  cont.damage[SHK.MDR.A == bin.edges[length(bin.edges)], bldg.damage := bin.names[length(bin.names)]]
+
+  cont.damage$bldg.damage <- factor(cont.damage$bldg.damage, levels = bin.names, ordered = T)
+  out.tb <- cont.damage[, .(GUC = sum(GU.SHK.C)), keyby = bldg.damage]
+  out.tb[, GUC.pct := GUC / total.cont.loss]
+  out.tb[, GUC.CDF := cumsum(GUC.pct)]
+  bldg.damage.ratio <- bins$bin.centers[match(out.tb$bldg.damage, bins$bin.names)]
+  temp <- data.frame(bldg.MDR=bldg.damage.ratio,
+                     probability = out.tb$GUC.CDF)
+}
+```
+
+```{r HR.cont.by.bldg.PMF,plot.width=10,plot.height=6,results='asis'}
+if(total.cont.loss>0){
+  ggplot(out.tb,aes(x=bldg.damage,y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    coord_flip()+labs(x='Building damage ratio',y='Contribution',
+                      title = paste0(event.name,'\n High-rise Content Loss \n Distribution by Building Damage'))
+
+}else{
+  cat('<span style="color:red">No shake content loss is from high rise building.</span>')
+}
+```
+
+```{r HR.cont.by.bldg.CDF,plot.width=10,plot.height=6}
+if(total.cont.loss>0){
+    ggplot(temp,aes(x=bldg.MDR, y=probability))+
+      geom_line(colour='darkgreen')+geom_point()+coord_flip()+
+      labs(x='Building damage ratio',y='CumSum of Contribution',
+           title = paste0(event.name,'\n High-rise Content Loss \n Distribution by Building Damage'))
+}
+```
+
+### High-rise Building Content Loss Distirubiont by Sa 2.0s
+
+```{r HR.cont.by.sa2.prepare,include=F,echo=F}
+# Content Distribution by Sa2.0 bins
+if(total.cont.loss>0){
+  bin.edges <- c(seq(0,0.2,by=0.01),
+            seq(0.22, 0.4, by = 0.02),
+            seq(0.5, 1.0, by = 0.1),
+            seq(1.2, 2, by = 0.2), 10)
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - diff(bin.edges)
+  bin.names <- c(paste0('< ',bin.edges[2]),
+                 paste0(bin.edges[2:(num.bin.edges-2)], ' - ', bin.edges[3:(num.bin.edges-1)]),
+                 paste0('> ',bin.edges[num.bin.edges-1]))
+  bins <- data.frame(bin.names, bin.centers)
+
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SA2 >= low.bound & SA2 < up.bound, Sa2.range := bin.names[i]]
+  }
+  cont.damage[SA2 == bin.edges[length(bin.edges)], Sa2.range := bin.names[length(bin.names)]]
+  cont.damage$Sa2.range <- factor(cont.damage$Sa2.range, 
+                                   levels = bin.names, ordered = T)
+  out.tb <- cont.damage[, .(GUC = sum(GU.SHK.C)), keyby = Sa2.range]
+  out.tb[, GUC.pct := GUC / total.cont.loss]
+  out.tb <- out.tb[order(Sa2.range),]
+  out.tb[, GUC.CDF := cumsum(GUC.pct)]
+  Sa2 <- bins$bin.centers[match(out.tb$Sa2.range, bins$bin.names)]
+  temp <- data.frame(Sa2=Sa2, probability = out.tb$GUC.CDF)
+}
+```
+
+```{r HR.cont.by.sa2.PMF,plot.width=10,plot.height=6}
+if(total.cont.loss>0){
+  ggplot(out.tb,aes(x=Sa2.range,y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    coord_flip()+labs(x='Sa 2.0s, g',y='Contribution',
+                      title = paste0(event.name,'\n High-rise Content Loss \n Distribution by Sa 2.0s'))
+}
+```
+
+```{r HR.cont.by.sa2.CDF,plot.width=10,plot.height=6}
+if(total.cont.loss>0){
+    ggplot(temp,aes(x=Sa2, y=probability))+
+      geom_line(colour='darkgreen')+geom_point()+
+      coord_flip()+labs(x='Sa 2.0s, g',y='CumSum of Contribution',
+                        title = paste0(event.name,'\n High-rise Content Loss \n Distribution by Sa 2.0s'))
+}
+```
+
+
+### Tall Building Content Loss Distirubiont by Building Damage
+
+```{r Tall.cont.by.bldg.prepare, include=F, echo=F}
+bin.edges <- c(seq(0,0.1,by=0.01),
+          seq(0.12, 0.5,by=0.02),
+          seq(0.6,1.0,by=0.1))
+num.bin.edges <- length(bin.edges)
+bin.centers <- bin.edges[-1] - diff(bin.edges)
+bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
+bins <- data.frame(bin.names, bin.centers)
+
+cont.damage <- EQsim.data[Height == height.band.names[4], .(SA3,SHK.MDR.A,SHK.MDR.C,GU.SHK.C)]
+total.cont.loss <- cont.damage[,sum(GU.SHK.C)]
+if(total.cont.loss>0){
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SHK.MDR.A >= low.bound & SHK.MDR.A < up.bound, bldg.damage := bin.names[i]]
+  }
+  cont.damage[SHK.MDR.A == bin.edges[length(bin.edges)], bldg.damage := bin.names[length(bin.names)]]
+
+  cont.damage$bldg.damage <- factor(cont.damage$bldg.damage, levels = bin.names, ordered = T)
+  out.tb <- cont.damage[, .(GUC = sum(GU.SHK.C)), keyby = bldg.damage]
+  out.tb[, GUC.pct := GUC / total.cont.loss]
+  out.tb[, GUC.CDF := cumsum(GUC.pct)]
+  bldg.damage.ratio <- bins$bin.centers[match(out.tb$bldg.damage, bins$bin.names)]
+  temp <- data.frame(bldg.MDR=bldg.damage.ratio,
+                     probability = out.tb$GUC.CDF)
+}
+```
+
+```{r Tall.cont.by.bldg.PMF,plot.width=10,plot.height=6,results='asis'}
+if(total.cont.loss>0){
+  ggplot(out.tb,aes(x=bldg.damage,y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    coord_flip()+labs(x='Building damage ratio',y='Contribution',
+                      title = paste0(event.name,'\n Tall Building Content Loss \n Distribution by Building Damage'))
+
+}else{
+  cat('<span style="color:red">No shake content loss is from tall building.</span>')
+}
+```
+
+```{r Tall.cont.by.bldg.CDF,plot.width=10,plot.height=6}
+if(total.cont.loss>0){
+    ggplot(temp,aes(x=bldg.MDR, y=probability))+
+      geom_line(colour='darkgreen')+geom_point()+coord_flip()+
+      labs(x='Building damage ratio',y='CumSum of Contribution',
+           title = paste0(event.name,'\n Tall Building Content Loss \n Distribution by Building Damage'))
+}
+```
+
+### Tall Building Content Loss Distirubiont by Sa 3.0s
+
+```{r Tall.cont.by.sa3.prepare,include=F,echo=F}
+if(total.cont.loss>0){
+  bin.edges <- c(seq(0,0.2,by=0.01),
+            seq(0.22, 0.4, by = 0.02),
+            seq(0.5, 1.0, by = 0.1),
+            seq(1.2, 2, by = 0.2), 10)
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - diff(bin.edges)
+  bin.names <- c(paste0('< ',bin.edges[2]),
+                 paste0(bin.edges[2:(num.bin.edges-2)], ' - ', bin.edges[3:(num.bin.edges-1)]),
+                 paste0('> ',bin.edges[num.bin.edges-1]))
+  bins <- data.frame(bin.names, bin.centers)
+
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SA3 >= low.bound & SA3 < up.bound, Sa3.range := bin.names[i]]
+  }
+  cont.damage[SA3 == bin.edges[length(bin.edges)], Sa3.range := bin.names[length(bin.names)]]
+  cont.damage$Sa3.range <- factor(cont.damage$Sa3.range, 
+                                  levels = bin.names, ordered = T)
+  out.tb <- cont.damage[, .(GUC = sum(GU.SHK.C)), keyby = Sa3.range]
+  out.tb[, GUC.pct := GUC / total.cont.loss]
+  out.tb <- out.tb[order(Sa3.range),]
+  out.tb[, GUC.CDF := cumsum(GUC.pct)]
+  Sa3 <- bins$bin.centers[match(out.tb$Sa3.range, bins$bin.names)]
+  temp <- data.frame(Sa3=Sa3, probability = out.tb$GUC.CDF)
+}
+```
+
+```{r Tall.cont.by.sa3.PMF,plot.width=10,plot.height=6}
+if(total.cont.loss>0){
+  ggplot(out.tb,aes(x=Sa3.range,y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    coord_flip()+labs(x='Sa 3.0s, g',y='Contribution',
+                      title = paste0(event.name,'\n Tall Building Content Loss \n Distribution by Sa 3.0s'))
+}
+```
+
+```{r Tall.cont.by.sa3.CDF,plot.width=10,plot.height=6}
+if(total.cont.loss>0){
+    ggplot(temp,aes(x=Sa3, y=probability))+
+      geom_line(colour='darkgreen')+geom_point()+
+      coord_flip()+labs(x='Sa 3.0s, g',y='CumSum of Contribution',
+                        title = paste0(event.name,'\n Tall Content Loss \n Distribution by Sa 3.0s'))
+}
+```
+
+# Liquefaction distribution
+
+## Liquefaction loss map 
+
+```{r LIQ.GU.by.Grid.prepare, echo = FALSE, include =FALSE}
+LIQ.loss <- F
+LIQ.GU.dt <- EQsim.data[,.(GU = sum(GU.LIQ.A+GU.LIQ.C+GU.LIQ.D),
+                           GU.A = sum(GU.LIQ.A),
+                        Lat = min(Lat), Lon = min(Lon)),by=.(locationID)]
+LIQ.GU.dt <- LIQ.GU.dt[GU > 0,]
+LIQ.GU.dt[, GU.mUSD := GU / million]
+if(sum(LIQ.GU.dt$GU.mUSD) > 0) 
+{
+  LIQ.loss <- T
+  LongMin <- floor(min(LIQ.GU.dt$Lon))
+  LongMax <- ceiling(max(LIQ.GU.dt$Lon))
+  LatMin <- floor(min(LIQ.GU.dt$Lat))
+  LatMax <- ceiling(max(LIQ.GU.dt$Lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  grid.ctr <- LIQ.GU.dt[,.(Lon,Lat)]
+  rst <- rasterize(grid.ctr, background, fun = sum,
+                   field = LIQ.GU.dt[,.(GU.mUSD)])
+  writeRaster(rst, filename = file.path(getwd(),'maps',paste0(event.name,'LIQ.GU.mUSD.',today,'.img')),
+           format = 'HFA',overwrite = T)
+
+  # mean damage ratio per grid (building only)
+  Grid.RV <- IED[,.(RV.A = sum(RVA)), keyby = GridID]
+  setkey(LIQ.GU.dt, locationID)
+  LIQ.GU.dt <- Grid.RV[LIQ.GU.dt,]
+  LIQ.GU.dt[,CovA.MDR := GU.A / RV.A]
+  MDR.rst <- rasterize(grid.ctr, background, fun = mean,
+                   field = LIQ.GU.dt[,.(CovA.MDR)])
+  writeRaster(MDR.rst, filename = file.path(getwd(),'maps',paste0(event.name,'LIQ.CovA.MDR.',today,'.img')),
+           format = 'HFA',overwrite = T)
+}
+```
+
+Total ground up loss due to liquefaction is 
+`r paste0(formatC(sum(LIQ.GU.dt$GU.mUSD),format='f',big.mark=',',digits=0))` million USD.
+In the map below (if liquefaction has any loss), liquefaction GU loss is
+total ground up,  including building and business
+interruption losses (liquefaction does not support coverage C).
+Mean damage ratio (MDR) shown in the map is for building damage only and 
+is calculated by the following equation for each 1km grid.
+
+$$\frac{Total CovA GU loss}{Total CovA Rep Value}$$
+
+```{r LIQ.GU.by.GRID.map,fig.width=12,fig.height=8,warning = FALSE,results='asis'}
+if(LIQ.loss) {
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+  pal <- colorBin(palette = c("#EDE700","#77A226"), domain = range(LIQ.GU.dt$GU.mUSD), bins = 5)
+  m <- addRasterImage(map=m, rst, colors = pal, opacity = 0.5, group = "LIQ.GU")
+  MDR.pal <- colorBin(palette = c("#85D2F5","#F33717"), domain = range(LIQ.GU.dt$CovA.MDR), bins = 5)
+  m <- addRasterImage(map=m, MDR.rst, colors = MDR.pal, opacity = 0.5, group = "LIQ.MDR")
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c("LIQ.GU","LIQ.MDR"),
+                        options = layersControlOptions(collapsed = FALSE))
+  
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = MDR.pal, 
+                 values = range(LIQ.GU.dt$CovA.MDR), opacity = 1,
+                 title = 'Mean damage ratio')
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(LIQ.GU.dt$GU.mUSD), opacity = 1,
+                 title = 'GU, mUSD')
+  m 
+}else{
+  cat('<span style="color:red"> No liquefaction map because of zero liquefaction loss. </span>' )
+}
+```
+
+# Modeled tsunami intensity 
+
+## Elevation in the intensity file
+
+```{r tsu.elevation.map,fig.width=12,fig.height=8,warning = FALSE,cache=F,results='asis'}
+if(TSU.map.exists){
+  rst <- raster(elevation.map)
+
+  m <- leaflet() 
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                                 group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), 
+                  domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal,
+                      opacity = 0.5, group = 'elevation')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('elevation'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'elevation, m')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+## Tsunami wave height map
+
+Tsunami wave height is measured from mean sea level.
+
+```{r tsu.water.height.map,fig.width=12,fig.height=8,warning = FALSE,cache=F,results='asis'}
+if(TSU.map.exists){
+  rst <- raster(water.height.map)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'waterH')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('waterH'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Water height, m')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+## Equivalent inundation depth map
+
+Equivalent inundation depth is calculated using the following equation
+$$d+\frac{v^2}{2g}$$
+where $d$ is inundation depth measured from ground to water top and
+$v$ is velocity.
+
+
+```{r tsu.eqv.inundation.map,fig.width=12,fig.height=8,warning = FALSE,cache=F,results='asis'}
+if(TSU.map.exists){
+  rst <- raster(eqv.inundation.map)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'eqvInund')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('eqvInund'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Eqv. inundation depth, m')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+ 
+
+```{r TSU.GU.by.Grid.prepare, echo = FALSE, include =FALSE}
+TSU.loss <- F
+TSU.GU.dt <- EQsim.data[,.(GU = sum(GU.TSU.A+GU.TSU.C+GU.TSU.D),
+                           GU.A = sum(GU.TSU.A),
+                        Lat = min(Lat), Lon = min(Lon)),by=.(locationID)]
+TSU.GU.dt <- TSU.GU.dt[GU > 0,]
+TSU.GU.dt[, GU.mUSD := GU / million]
+if(sum(TSU.GU.dt$GU.mUSD) > 0)
+{
+  TSU.loss <- T
+  LongMin <- floor(min(TSU.GU.dt$Lon))
+  LongMax <- ceiling(max(TSU.GU.dt$Lon))
+  LatMin <- floor(min(TSU.GU.dt$Lat))
+  LatMax <- ceiling(max(TSU.GU.dt$Lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  grid.ctr <- TSU.GU.dt[,.(Lon,Lat)]
+  rst <- rasterize(grid.ctr, background, fun = sum,
+                   field = TSU.GU.dt[,.(GU.mUSD)])
+  writeRaster(rst, filename = file.path(getwd(),'maps',
+                                        paste0(event.name,'TSU.GU.mUSD.',today,'.img')),
+           format = 'HFA',overwrite = T)
+  Grid.RV <- IED[,.(RV.A = sum(RVA)),keyby=GridID]
+  setkey(TSU.GU.dt, locationID)
+  TSU.GU.dt <- Grid.RV[TSU.GU.dt,]
+  TSU.GU.dt[,CovA.MDR := GU.A / RV.A]
+  MDR.rst <- rasterize(grid.ctr, background, fun = sum,
+                   field = TSU.GU.dt[,.(CovA.MDR)])
+  writeRaster(MDR.rst, filename = file.path(getwd(),'maps',
+                                        paste0(event.name,'TSU.CovA.MDR.',today,'.img')),
+           format = 'HFA',overwrite = T)
+}
+```
+
+# Tsunami loss distributions 
+
+## Tsunami loss map 
+
+Total ground up loss due to tsunami is 
+`r paste0(formatC(sum(TSU.GU.dt$GU.mUSD),format='f',big.mark=',',digits=0))` million USD.
+Tsunami loss is total ground up,  including building and business
+interruption losses. However, mean damage ratio shown in the map is for building damage only.
+
+```{r TSU.GU.by.GRID.map,fig.width=12,fig.height=8,warning = FALSE,results='asis'}
+if(TSU.loss) {
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+  
+  pal <- colorBin(palette = c("#EDE700","#77A226"), domain = range(TSU.GU.dt$GU.mUSD), bins = 5)
+  m <- addRasterImage(map=m, rst, colors = pal, opacity = 0.5, group = "TSU.GU")
+
+  MDR.pal <- colorBin(palette = c("#85D2F5","#F33717"), domain = range(TSU.GU.dt$CovA.MDR), bins = 5)
+  m <- addRasterImage(map=m, MDR.rst, colors = MDR.pal, opacity = 0.5, group = "CovA.MDR")
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c("TSU.GU",'CovA.MDR'),
+                        options = layersControlOptions(collapsed = FALSE))
+  
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = MDR.pal, 
+                 values = range(TSU.GU.dt$CovA.MDR), opacity = 1,
+                 title = 'Mean damage ratio')
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(TSU.GU.dt$GU.mUSD), opacity = 1,
+                 title = 'GU, mUSD')
+  m 
+}else{
+  cat('<span style="color:red">No tsunami map because of zero tsunami loss.</span>')
+}
+```
+
+## Tsunami ground up loss by height
+
+```{r TSU.GU.By.Height, include = FALSE, echo=FALSE}
+if(TSU.loss){
+out.tb <- EQsim.data[,.(GU=sum(GU.TSU.A+GU.TSU.C+GU.TSU.D)),by = Height]
+write.csv(out.tb[order(-1*GU),],
+          file = file.path(getwd(),'R.output',
+                           paste0(event.name,'.TSU.GU.by.height.',today,'.csv')))
+
+out.tb[,GU.mUSD:=GU/million]
+out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+}
+```
+```{r TSU.GU.By.Height.PieChart, fig.width=7,fig.height=5}
+if(TSU.loss){
+  ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = Height))+
+    geom_bar(stat='identity',width = 1)+
+    coord_polar(theta= 'y')+
+    scale_fill_manual(values=c('#A9C0DC','#6599CB','#0777B5','#0D639B'))+
+    labs(title = event.name,x='',y='Tsunami ground up loss, mUSD')
+}
+```
+```{r TSU.MDR.By.Height, include = FALSE, echo=FALSE}
+if(TSU.loss){
+  out.tb <- EQsim.data[,.(GU=sum(GU.TSU.A+GU.TSU.C+GU.TSU.D)),by = .(GridID = locationID,Height)]
+
+  Grid.RV <- IED[,.(RV=sum(RVA+RVC+RVD)),by=.(GridID,Height)]
+  setkey(out.tb, GridID, Height)
+  setkey(Grid.RV, GridID, Height)
+  affected.grids <- Grid.RV[out.tb,]
+  out.tb <- affected.grids[,.(RV = sum(RV), GU = sum(GU)), by = Height]
+  out.tb[,MDR := GU / RV]
+  out.tb$Height <- factor(out.tb$Height, levels = height.band.names,
+                          ordered = T)
+  write.csv(out.tb, 
+            file = file.path(getwd(),'R.output',
+                             paste0(event.name,'.TSU.MDR.by.Height.',today,'.csv')))
+}
+```
+```{r TSU.MDR.By.Height.BarChart, fig.width=6,fig.height=5}
+if(TSU.loss){
+  ggplot(out.tb, aes(x = Height, y = MDR ))+
+    geom_bar(stat='identity',colour='white',fill='#8CC63F')+
+    labs(title = event.name,x='Height',y='Tsunami MDR')+
+    coord_flip()
+}
+```
+
+## Tsunami ground up loss by line of business
+
+```{r TSU.GU.By.LOB, include = FALSE, echo=FALSE}
+if(TSU.loss){
+  out.tb <- EQsim.data[,.(GU=sum(GU.TSU.A+GU.TSU.C+GU.TSU.D)),by = BC]
+  write.csv(out.tb[order(-1*GU),],
+            file = file.path(getwd(),'R.output',
+                             paste0(event.name,'.TSU.GU.by.LOB.',today,'.csv')))
+
+  out.tb[,GU.mUSD:=GU/million]
+}
+```
+```{r TSU.GU.By.LOB.PieChart, fig.width=7,fig.height=5}
+if(TSU.loss){
+  ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = BC))+
+    geom_bar(stat='identity',width = 1)+
+    coord_polar(theta= 'y')+
+    labs(title = event.name,x='',y='Tsunami ground up loss, mUSD')
+}
+```
+```{r TSU.MDR.By.LOB, include = FALSE, echo=FALSE}
+if(TSU.loss){
+  out.tb <- EQsim.data[,.(GU=sum(GU.TSU.A+GU.TSU.C+GU.TSU.D)),by = .(GridID = locationID,BC)]
+  Grid.RV <- IED[,.(RV = sum(RVA+RVC+RVD)), by = .(GridID,BC)]
+  setkey(Grid.RV, GridID, BC)
+  setkey(out.tb, GridID, BC)
+  affected.grids <- Grid.RV[out.tb,]
+  out.tb <- affected.grids[,.(GU = sum(GU), RV = sum(RV)), by = BC]
+  out.tb[,MDR:=GU/RV]
+  write.csv(out.tb, 
+            file = file.path(getwd(),'R.output',
+                             paste0(event.name,'.TSU.MDR.by.LOB.',today,'.csv')))
+}
+```
+```{r TSU.MDR.By.LOB.BarChart, fig.width=5,fig.height=3.5}
+if(TSU.loss){
+  ggplot(out.tb, aes(x = BC, y = MDR))+
+    geom_bar(stat='identity',colour='white',fill='#8CC63F')+
+    labs(title = event.name,x='Line of business',y='Tsunami MDR')
+}
+```
+
+## Tsunami ground up loss by construction
+```{r TSU.GU.By.CC, include = FALSE, echo=FALSE}
+if(TSU.loss){
+  out.tb <- EQsim.data[,.(TSU.bldg=sum(GU.TSU.A),
+                          TSU.cont=sum(GU.TSU.C),
+                          TSU.time=sum(GU.TSU.D)),by = CC]
+  write.csv(out.tb[order(-1*TSU.bldg),],
+            file = file.path(getwd(),'R.output',
+                             paste0(event.name,'.TSU.GU.by.CC.',today,'.csv')))
+
+  DT <- melt(out.tb,id.vars = 'CC', variable.name = 'Coverage', value.name = 'GU.mUSD')
+  DT[,GU.mUSD := GU.mUSD / million]
+}
+```
+```{r TSU.GU.By.CC.BarChart, fig.width=8,fig.height=5}
+if(TSU.loss){
+  ggplot(DT, aes(x = factor(CC), y = GU.mUSD))+
+    geom_bar(stat='identity',colour='white',fill='#8CC63F')+ facet_grid(Coverage ~ .)+
+    labs(title = event.name,x='Construction',y='Tsunami Ground up loss, mUSD')
+}
+```
+```{r TSU.MDR.By.CC, include = FALSE, echo=FALSE}
+if(TSU.loss){
+  # split by construction (damage ratio)
+  out.tb <- EQsim.data[,.(TSU.bldg=sum(GU.TSU.A),
+                          TSU.cont=sum(GU.TSU.C),
+                          TSU.time=sum(GU.TSU.D)),by = .(CC,GridID=locationID)]
+  setkey(out.tb, CC, GridID)
+  CC.GridID.RV <- IED[,.(bldg.RV = sum(RVA),
+                         cont.RV = sum(RVC),
+                         time.RV = sum(RVD)),by=.(CC,GridID)]
+  setkey(CC.GridID.RV, CC, GridID)
+  # Get RV on affected grids
+  RV.affected.grids <- CC.GridID.RV[out.tb,]
+  out.tb <- RV.affected.grids[,.(bldg.GU = sum(TSU.bldg),
+                                 bldg.RV = sum(bldg.RV),
+                                 cont.GU = sum(TSU.cont),
+                                 cont.RV = sum(cont.RV),
+                                 time.GU = sum(TSU.time),
+                                 time.RV = sum(time.RV)),by = CC]
+  out.tb[,':='(bldg.MDR = bldg.GU / bldg.RV,
+               cont.MDR = cont.GU / cont.RV,
+               time.MDR = time.GU / time.RV)]
+  write.csv(out.tb, 
+            file = file.path(getwd(),'R.output',
+                             paste0(event.name,'.TSU.MDR.by.CC.','.csv')))
+  rm(RV.affected.grids, CC.GridID.RV)
+  DT <- melt(out.tb, id.vars = 'CC', measure.vars = c('bldg.MDR',
+                                                      'cont.MDR',
+                                                      'time.MDR'),
+             variable.name = 'Coverage', value.name = 'MDR')
+}
+```
+
+```{r TSU.MDR.By.CC.BarChart, fig.width=8,fig.height=5}
+if(TSU.loss){
+  ggplot(DT, aes(x = factor(CC), y = MDR))+
+    geom_bar(stat='identity',colour='white',fill='#8CC63F')+ facet_grid(Coverage ~ .)+
+    labs(title = event.name,x='Construction',y='Tsunami mean damage raio')
+}
+```
+
+## Tsunami ground up loss by occupancy
+```{r TSU.GU.By.OCC, include = FALSE, echo=FALSE}
+if(TSU.loss){
+  out.tb <- EQsim.data[,.(TSU.bldg=sum(GU.TSU.A),
+                          TSU.cont=sum(GU.TSU.C),
+                          TSU.time=sum(GU.TSU.D)),by = OCC]
+  write.csv(out.tb[order(-1*TSU.bldg),],
+            file = file.path(getwd(),'R.output',
+                             paste0(event.name,'.TSU.GU.by.OCC.','.csv')))
+
+  DT <- melt(out.tb,id.vars = 'OCC', variable.name = 'Coverage', value.name = 'GU.mUSD')
+  DT[,GU.mUSD := GU.mUSD / million]
+}
+```
+
+```{r TSU.GU.By.OCC.BarChart, fig.width=8,fig.height=5}
+if(TSU.loss){
+  ggplot(DT, aes(x = factor(OCC), y = GU.mUSD))+
+    geom_bar(stat='identity',colour='white',fill='#8CC63F')+ facet_grid(Coverage ~ .)+
+    labs(title = event.name,x='Occupancy',y='Tsunami ground up loss, mUSD')
+}
+```
+```{r TSU.MDR.By.OCC, include = FALSE, echo=FALSE}
+if(TSU.loss){
+  out.tb <- EQsim.data[,.(TSU.bldg=sum(GU.TSU.A),
+                          TSU.cont=sum(GU.TSU.C),
+                          TSU.time=sum(GU.TSU.D)),by = .(OCC,GridID=locationID)]
+  setkey(out.tb, OCC, GridID)
+  OCC.GridID.RV <- IED[,.(bldg.RV = sum(RVA),
+                          cont.RV = sum(RVC),
+                          time.RV = sum(RVD)),by=.(OCC,GridID)]
+  setkey(OCC.GridID.RV, OCC, GridID)
+  # Get RV on affected grids
+  RV.affected.grids <- OCC.GridID.RV[out.tb,]
+  out.tb <- RV.affected.grids[,.(bldg.GU = sum(TSU.bldg),
+                                 bldg.RV = sum(bldg.RV),
+                                 cont.GU = sum(TSU.cont),
+                                 cont.RV = sum(cont.RV),
+                                 time.GU = sum(TSU.time),
+                                 time.RV = sum(time.RV)),by = OCC]
+  out.tb[,':='(bldg.MDR = bldg.GU / bldg.RV,
+               cont.MDR = cont.GU / cont.RV,
+               time.MDR = time.GU / time.RV)]
+  write.csv(out.tb, file = file.path(getwd(), 'R.output',
+                                     paste0(event.name,'.TSU.MDR.by.OCC.',today,'.csv')))
+  rm(OCC.GridID.RV,RV.affected.grids)
+  DT <- melt(out.tb, id.vars = 'OCC', measure.vars = c('bldg.MDR',
+                                                       'cont.MDR',
+                                                       'time.MDR'),
+             variable.name = 'Coverage', value.name = 'MDR')
+}
+```
+```{r TSU.MDR.By.OCC.BarChart, fig.width=8,fig.height=5}
+if(TSU.loss){
+  ggplot(DT, aes(x = factor(OCC), y = MDR))+
+    geom_bar(stat='identity',colour='white',fill='#8CC63F')+ facet_grid(Coverage ~ .)+
+    labs(title = event.name,x='Occupancy',y='Mean damage raio')
+}
+```
+

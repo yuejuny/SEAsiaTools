@@ -1,0 +1,189 @@
+---
+title: "1971 San Fernando earthquake"
+author: "Yue-Jun Yin"
+date: "`r Sys.time()`" 
+output: 
+  html_document:
+    css: custom.css
+    toc: true
+---
+
+```{r GlobalOptions,include=FALSE}
+knitr::opts_chunk$set(fig.path='Figs/', echo=FALSE,warning=FALSE,message=FALSE)
+```
+
+```{r LoadPackages,include=FALSE}
+library(raster,quietly=T,warn.conflicts=F)
+library(data.table,quietly=T,warn.conflicts=F)
+library(bit64,quietly=T,warn.conflicts=F)
+library(rgdal,quietly=T,warn.conflicts=F)
+library(reshape2,quietly=T,warn.conflicts=F)
+library(ggplot2,quietly=T,warn.conflicts=F)
+library(leaflet,quietly=T,warn.conflicts=F)
+library(jsonlite,quietly = TRUE, warn.conflicts=FALSE)
+library(pander,quietly = TRUE, warn.conflicts=FALSE)
+library(scales)
+```
+
+```{r Options,echo=FALSE,include=FALSE}
+# DO NOT CHANGE US.Eng.dir. It is a global path.
+US.Eng.dir <- '//RSEARTHQUAKE/Earthquake3/Work/Model_011/2016/EngineeringG'
+
+# This path should be changed suiting your situation
+data.dir <- 'Validation_Historical/HistoricalEQ/1971SanFernando' 
+
+#***** Ground motion intensity ********
+# If you want pre-made ground motion intensity, set it to true
+# and provide paths to pre-made files.
+pre.made.GM.intensity <- F
+int.Hist.file <- file.path(US.Eng.dir, data.dir, 'EQSim.Output/int.Hist.1971')
+# Soil.raster.file <- ''
+# MMI.raster.file <- ''
+# PGA.raster.file <- ''
+# SA03.raster.file <- ''
+# SA1.raster.file <- ''
+# SA3.raster.file <- ''
+
+#***** Tsunami intensity ******
+# If tsunami inundation maps are available, set
+# it to TRUE and provide paths.
+TSU.map.exists <- F
+# elevation.map.file <- ''
+# water.height.map.file <- ''
+# eqv.inundation.map.file <- ''
+
+#***** expousre *****
+IED.version <- 'All Property' #  options are: 'Insurable' or 'All Property'
+IED.file.rda <- 'path-to-RData-IED-file'
+
+FootprintLoss.rda <- F
+# If footpring is not RData, by default take it as csv without header.
+# For csv with header, go to section "LoadEQSimLoss" and change fread() option.
+FootprintLoss.file <- file.path(US.Eng.dir, data.dir, 'EQSim.Output/Footprint.Shake.Hist.1971')
+
+# Set to F if TD/TID/EDS event is to be analyzed.
+# IF TD/TID/EDS events are to be analyzed, go to
+# section "LoadCatalog" to specify catalog data.
+is.historical <- T 
+event.ID <- 50  
+
+#******** output HTML report option *******
+# SHK loss report is always included.
+include.GM <- T # Turn ON/OFF ground motion maps 
+include.LIQ <- F # Turn ON/OFF detailed LIQ loss report
+include.TSU <- F # Turn ON/OFF detailed Tsunami loss report
+include.LND <- F # Turn ON/OFF detailed land slide loss report
+include.SPR <- F # Turn ON/OFF detailed sprinkler loss report
+```
+
+```{r SetUpWorkingDir, echo = F, include = F}
+source(file.path(US.Eng.dir, data.dir, 'R/MakeRupSurface.R'))
+source(file.path(US.Eng.dir, data.dir, 'R/F.BinAverage.R'))
+billion <- 10^9
+million <- 10^6
+thousand <- 10^3
+raster.res <- 1/120 # decimal degree
+exch.rate <- 1.0 # 
+today <- format(Sys.Date(),'%d%b%Y')
+```
+
+```{r HistEQNameID,echo=FALSE,include=FALSE}
+if(is.historical){
+  Hist.EQ <- fread(file.path(US.Eng.dir, 'Validation_Historical/HistoricalEQ/catalog/US.Historical.EQ.csv'))
+  setkey(Hist.EQ, EventID)
+  event.name <- Hist.EQ[EventID == event.ID, Name]
+  event.year <- Hist.EQ[EventID == event.ID, Year]
+}else{
+  event.name <- paste0('event.',event.ID)
+  event.year <- NA
+}
+```
+
+```{r PreMadeGMRaster,echo=FALSE,include=FALSE}
+if(pre.made.GM.intensity){
+  Soil.raster <- file.path(Soil.raster.file)
+  MMI.raster <- file.path(MMI.raster.file)
+  PGA.raster <- file.path(PGA.raster.file)
+  SA03.raster <- file.path(SA03.raster.file)
+  SA1.raster <- file.path(SA1.raster.file)
+  SA3.raster <- file.path(SA3.raster.file)
+}
+```
+
+```{r LoadTsuMap,echo=FALSE,include=FALSE,cache=T}
+if(TSU.map.exists){
+  elevation.map <- file.path(elevation.map.file)
+  water.height.map <- file.path(water.height.map.file)
+  eqv.inundation.map <- file.path(eqv.inundation.map.file)
+}
+```
+
+```{r LoadCatalog,echo=FALSE,include=FALSE,cache=T}
+load(file.path(US.Eng.dir, 'Validation_Historical/HistoricalEQ/catalog/Cat_M11_Historic_Marquee_MedGM_only_v1_20150911.RData'))
+catalog <- catalog[EventID == event.ID,]
+```
+
+```{r LoadSTATETable,echo=FALSE,include=FALSE,cache=T}
+STATE.table <- fread(file.path(US.Eng.dir, 'Exposure_Claims/FIPS_code/USA.State.FIPS.mapping.csv'),
+                     colClasses = c('integer','integer', 'character'))
+setkey(STATE.table, FIPS)
+```
+
+```{r LoadSTATE.Shapefile,echo=FALSE,include=FALSE,cache=T}
+STATE.shp <- readOGR(dsn=file.path(US.Eng.dir, 'BoundaryFiles'),
+                     layer='US.TS4.continent.state.boundary')
+```
+
+```{r LoadEQSimLoss,echo=FALSE,include=FALSE,cache=T}
+if(FootprintLoss.rda){
+  load(FootprintLoss.rda)
+}else{
+  col.names <- c('Long', 'Lat', 'GridID', 'EventID','stateFIPS',
+                 'countyFIPS','LOB','CC','OCC','NStory',
+                 'YearBuilt','RVA','RVC','RVD',
+                 'SHK.GU.A','LIQ.GU.A','TSU.GU.A','LND.GU.A','FFE.GU.A','SPL.GU.A',
+                 'SHK.GU.C','LIQ.GU.C','TSU.GU.C','LND.GU.C','FFE.GU.C','SPL.GU.C',
+                 'SHK.GU.D','LIQ.GU.D','TSU.GU.D','LND.GU.D','FFE.GU.D','SPL.GU.D')
+  EQsim.data <- fread(FootprintLoss.file, header = F, 
+                      colClasses = c(rep('numeric', 2), rep('integer', 9), rep('numeric', 21)))
+  setnames(EQsim.data, col.names)
+}
+EQsim.data <- EQsim.data[EventID==event.ID,]
+
+# Define Line of business
+EQsim.data[LOB==1|LOB==5,BC:='Res']
+EQsim.data[LOB==2|LOB==7|LOB==6|LOB==8,BC:='ComInd']
+EQsim.data[LOB==4,BC:='Auto']
+EQsim.data[LOB==3,BC:='MobH']
+EQsim.data$BC <- factor(EQsim.data$BC, levels=c('Res','ComInd','Auto','MobH'))
+
+# Defind height band
+height.band.names <- c('Low-rise (1-3)',
+                       'Mid-rise (4-7)', 
+                       'High-rise (8-25)', 
+                       'Tall (26+)', 
+                       'Unknown')
+
+EQsim.data[NStory>=1 & NStory<=3, Height:=height.band.names[1]] 
+EQsim.data[NStory<=7 & NStory>=4, Height:=height.band.names[2]] 
+EQsim.data[NStory<=25 & NStory>=8, Height:=height.band.names[3]] 
+EQsim.data[NStory>=26, Height:=height.band.names[4]] 
+EQsim.data[NStory==0, Height:=height.band.names[5]] 
+EQsim.data$Height <- factor(EQsim.data$Height, levels = height.band.names)
+```
+
+```{r LoadGM.Int, echo = F, include = F, cache = F}
+int.Hist <- fread(int.Hist.file, header = T, 
+                  colClasses = c(rep('integer', 2),
+                                 rep('numeric', 14)))
+int.Hist[, SA2 := SA3 / 0.6]
+setkey(int.Hist, GridID)
+```
+
+```{r hasGMChild, child = 'GM.common.section.RMD'}
+```
+
+```{r hasGMChild, child = 'USA.common.section.RMD'}
+```
+
+
