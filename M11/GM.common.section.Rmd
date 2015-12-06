@@ -1,0 +1,529 @@
+# Catalog, Soil and Ground motion intensity
+
+## Catalog Information
+
+```{r catalog.info,echo=F,results='asis'}
+  pandoc.table(as.data.frame(catalog),style='rmarkdown')
+```
+
+```{r function.rupture,echo=F,include=F}
+if(nrow(catalog) > 1){
+  catalog <- catalog[NumSegments>0,]
+}else{
+  catalog$NumSegments <- 1
+}
+out.sr <- list()
+for(i in 1:nrow(catalog)){
+  out.sr[[i]] <- rupture.polygon(Lon=catalog$Lon[i],
+                                 Lat=catalog$Lat[i],
+                                 Depth=catalog$FocalDepth[i],
+                                 Length=catalog$Length[i],
+                                 Width=catalog$Width[i],
+                                 Azimuth=catalog$Azimuth[i], 
+                                 DipAngle=catalog$DipAngle[i],
+                                 DipAzi=catalog$DipAzimuth[i],
+                                 segmentID=catalog$NumSegments[i])
+}
+sr <- SpatialPolygons(out.sr, proj4string=CRS('+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs'))
+att.tb <- data.frame(segment=catalog$NumSegments)
+rownames(att.tb) <- as.character(att.tb$segment)
+rupture.srdf <- SpatialPolygonsDataFrame(sr,data=att.tb,match.ID=T)
+```
+
+## Soil Map
+### Pre-made soil map
+
+```{r Soil.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(include.GM & pre.made.GM.intensity){
+  rst <- raster(Soil.raster)
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'Soil')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('Soil'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Soil')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### Soil map from int file
+
+```{r fp.based.soil.prepare, echo = FALSE, include =FALSE}
+if(include.GM){
+  GM.int.FP <- int.Hist[,.(lon,lat,value=Soil)]
+  LongMin <- floor(min(GM.int.FP$lon))
+  LongMax <- ceiling(max(GM.int.FP$lon))
+  LatMin <- floor(min(GM.int.FP$lat))
+  LatMax <- ceiling(max(GM.int.FP$lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  grid.ctr <- GM.int.FP[,.(lon,lat)]
+  rst <- rasterize(grid.ctr, background, fun = mean,
+                   field = GM.int.FP[,.(value)])
+  writeRaster(rst, filename = file.path(US.Eng.dir, data.dir,'maps',
+                                        paste0(event.name,'soil.from.Footprint.',today,'.img')),
+              format = 'HFA',overwrite = T)
+}
+```
+
+```{r fp.based.soil.Map, fig.width=12,fig.height=8,warning=F}
+if(include.GM){
+  r.range <- c(minValue(rst), maxValue(rst))
+  pal <- colorBin(palette = c('#E7E739','#006121'), 
+                  domain = r.range, bins=6)
+  leaflet()%>%
+  addProviderTiles(provider = 'Stamen.TonerLite',
+                  group = 'Toner Lite') %>%
+  addTiles(group = 'OSM')%>%
+  addProviderTiles(provider = 'MapQuestOpen.Aerial',group='Aerial')%>%
+  addRasterImage(rst, colors = pal, opacity = 0.5, group = 'soil')%>%
+  addPolygons(data=rupture.srdf, weight = 2, 
+              fill=F, color = 'darkblue',
+              popup=paste0('Segment: ',rupture.srdf$segment))%>%
+  addLayersControl(baseGroups = c("Aerial","Toner Lite","OSM"), 
+                   overlayGroups = c('soil'),
+                   options = layersControlOptions(collapsed = FALSE))%>%
+  addLegend(position = "bottomleft", pal = pal, 
+            values = range(v), opacity = 1,
+            title = 'Soil')
+}
+```
+
+## Modeled MMI 
+
+### Pre-made ground motion MMI 
+
+```{r MMI.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(include.GM & pre.made.GM.intensity){
+  rst <- raster(MMI.raster)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'MMI')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('MMI'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'MMI')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### MMI map from EQSim footprint file
+
+```{r fp.based.MMI.prepare, echo = FALSE, include =FALSE}
+if(include.GM){
+  GM.int.FP <- int.Hist[,.(lon,lat,value=MMI)]
+  LongMin <- floor(min(GM.int.FP$lon))
+  LongMax <- ceiling(max(GM.int.FP$lon))
+  LatMin <- floor(min(GM.int.FP$lat))
+  LatMax <- ceiling(max(GM.int.FP$lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  grid.ctr <- GM.int.FP[,.(lon,lat)]
+  rst <- rasterize(grid.ctr, background, fun = mean,
+                   field = GM.int.FP[,.(value)])
+  writeRaster(rst, filename = file.path(US.Eng.dir, data.dir,'maps',
+                                        paste0(event.name,'MMI.from.Footprint.',today,'.img')),
+              format = 'HFA',overwrite = T)
+}
+```
+
+```{r fp.based.MMI.Map, fig.width=12,fig.height=8,warning=F}
+if(include.GM){
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'MMI')
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('MMI'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'MMI')
+  m 
+}
+```
+
+## Modeled PGA 
+
+### Pre-made raster map of PGA using contrived exposure
+
+```{r PGA.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(include.GM & pre.made.GM.intensity){
+  rst <- raster(PGA.raster)
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'PGA')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('PGA'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'PGA, g')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### PGA map based on EQSim footprint file
+
+```{r fp.based.PGA.prepare, echo = FALSE, include =FALSE}
+if(include.GM){
+  GM.int.FP <- int.Hist[,.(lon,lat,value=PGA)]
+  LongMin <- floor(min(GM.int.FP$lon))
+  LongMax <- ceiling(max(GM.int.FP$lon))
+  LatMin <- floor(min(GM.int.FP$lat))
+  LatMax <- ceiling(max(GM.int.FP$lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  grid.ctr <- GM.int.FP[,.(lon,lat)]
+  rst <- rasterize(grid.ctr, background, fun = mean,
+                   field = GM.int.FP[,.(value)])
+  writeRaster(rst, filename = file.path(US.Eng.dir, data.dir,'maps',paste0(event.name,'PGA.from.Footprint.',today,'.img')),
+              format = 'HFA',overwrite = T)
+}
+```
+
+```{r fp.based.PGA.Map, fig.width=12,fig.height=8,warning=F}
+if(include.GM){
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'PGA')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('PGA'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'PGA')
+  m 
+}
+```
+
+## Modeled Sa 0.3 sec 
+
+### Pre-made raster map using contrived exposure
+
+```{r SA03.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(include.GM & pre.made.GM.intensity){
+  rst <- raster(SA03.raster)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA0.3')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA0.3'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'SA0.3, g')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### Sa 0.3 map based on EQSim footprint file
+
+```{r fp.based.SA03.prepare, echo = FALSE, include =FALSE}
+if(include.GM){
+  GM.int.FP <- int.Hist[,.(lon,lat,value=SA03)]
+  LongMin <- floor(min(GM.int.FP$lon))
+  LongMax <- ceiling(max(GM.int.FP$lon))
+  LatMin <- floor(min(GM.int.FP$lat))
+  LatMax <- ceiling(max(GM.int.FP$lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  grid.ctr <- GM.int.FP[,.(lon,lat)]
+  rst <- rasterize(grid.ctr, background, fun = mean,
+                   field = GM.int.FP[,.(value)])
+  writeRaster(rst, filename = file.path(US.Eng.dir, data.dir,'maps',paste0(event.name,'SA03.from.Footprint.',today,'.img')),
+              format = 'HFA',overwrite = T)
+}
+```
+
+```{r fp.based.SA03.Map, fig.width=12,fig.height=8,warning=F}
+if(include.GM){
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA03')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA03'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Sa 0.3s, g')
+  m 
+}
+```
+
+## Modeled Sa 1.0 sec 
+
+### Pre-made Sa 1.0s map using contrived exposure
+
+```{r SA1.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(include.GM & pre.made.GM.intensity){
+  rst <- raster(SA1.raster)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA1')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA1'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'SA1, g')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### Sa 1.0s map based on EQSim footprint file
+
+```{r fp.based.SA1.prepare, echo = FALSE, include =FALSE}
+if(include.GM){
+  GM.int.FP <- int.Hist[,.(lon,lat,value=SA1)]
+  LongMin <- floor(min(GM.int.FP$lon))
+  LongMax <- ceiling(max(GM.int.FP$lon))
+  LatMin <- floor(min(GM.int.FP$lat))
+  LatMax <- ceiling(max(GM.int.FP$lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  grid.ctr <- GM.int.FP[,.(lon,lat)]
+  rst <- rasterize(grid.ctr, background, fun = mean,
+                   field = GM.int.FP[,.(value)])
+  writeRaster(rst, filename = file.path(US.Eng.dir, data.dir,'maps',paste0(event.name,'SA1.from.Footprint.',today,'.img')),
+              format = 'HFA',overwrite = T)
+}
+```
+
+```{r fp.based.SA1.Map, fig.width=12,fig.height=8,warning=F}
+if(include.GM){
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA1')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA1'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Sa 1.0s, g')
+  m 
+}
+```
+
+## Modeled Sa 3.0 sec 
+
+### Pre-made raster using contrived exposure
+
+```{r SA3.Map, fig.width=12,fig.height=8,warning=F,cache=F,results='asis'}
+if(include.GM & pre.made.GM.intensity){
+  rst <- raster(SA3.raster)
+
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA3')
+
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA3'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'SA3, g')
+  m 
+}else{
+  cat('<span style="color:red">Sorry, man, did you forget to provide pre-made maps?</span>')
+}
+```
+
+### Sa 3.0s map based on EQSim footprint file
+
+```{r fp.based.SA3.prepare, echo = FALSE, include =FALSE}
+if(include.GM){
+GM.int.FP <- int.Hist[,.(lon,lat,value=SA3)]
+LongMin <- floor(min(GM.int.FP$lon))
+LongMax <- ceiling(max(GM.int.FP$lon))
+LatMin <- floor(min(GM.int.FP$lat))
+LatMax <- ceiling(max(GM.int.FP$lat))
+background <- raster(xmn = LongMin, xmx = LongMax,
+                     ymn = LatMin, ymx = LatMax,
+                     resolution = raster.res)
+grid.ctr <- GM.int.FP[,.(lon,lat)]
+rst <- rasterize(grid.ctr, background, fun = mean,
+                 field = GM.int.FP[,.(value)])
+writeRaster(rst, filename = file.path(US.Eng.dir, data.dir,'maps',paste0(event.name,'SA3.from.Footprint.',today,'.img')),
+            format = 'HFA',overwrite = T)
+}
+```
+
+```{r fp.based.SA3.Map, fig.width=12,fig.height=8,warning=F}
+if(include.GM){
+  m <- leaflet()
+  m <- addProviderTiles(map = m, provider = 'Stamen.TonerLite',
+                        group = 'Toner Lite')
+  m <- addTiles(map = m, group = 'OSM')
+  m <- addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+  v <- values(rst)
+  v <- v[!is.na(v)]
+  pal <- colorBin(palette = c('#E7E739','#006121'), domain = range(v), bins=6)
+  m <- addRasterImage(map = m, rst, colors = pal, opacity = 0.5, group = 'SA3')
+
+  m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+  m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                        overlayGroups = c('SA3'),
+                        options = layersControlOptions(collapsed = FALSE))
+
+  m <- addLegend(map = m, 
+                 position = "bottomleft", pal = pal, 
+                 values = range(v), opacity = 1,
+                 title = 'Sa 3.0s, g')
+  m 
+}
+```
+

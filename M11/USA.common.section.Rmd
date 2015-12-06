@@ -1,0 +1,1139 @@
+# Event total ground up loss splits 
+
+## Ground up loss by peril
+
+```{r GUByPeril,echo=FALSE,include=FALSE}
+Total.GU <- EQsim.data[,sum(SHK.GU.A+SHK.GU.C+SHK.GU.D+
+                            LIQ.GU.A+LIQ.GU.C+LIQ.GU.D+
+                            TSU.GU.A+TSU.GU.C+TSU.GU.D+
+                            LND.GU.A+LND.GU.C+LND.GU.D+
+                            FFE.GU.A+FFE.GU.C+FFE.GU.D+
+                            SPL.GU.A+SPL.GU.C+SPL.GU.D)]
+
+out.tb <- EQsim.data[,.(SHK.GU =sum(SHK.GU.A+SHK.GU.C+SHK.GU.D),
+                        LIQ.GU =sum(LIQ.GU.A+LIQ.GU.C+LIQ.GU.D),
+                        TSU.GU =sum(TSU.GU.A+TSU.GU.C+TSU.GU.D),
+                        GU.LND =sum(LND.GU.A+LND.GU.C+LND.GU.D),
+                        GU.FFE =sum(FFE.GU.A+FFE.GU.C+FFE.GU.D),
+                        GU.SPL =sum(SPL.GU.A+SPL.GU.C+SPL.GU.D)), by = EventID]
+out.tb[,':='(SHK = out.tb$SHK.GU / Total.GU,
+             LIQ = out.tb$LIQ.GU / Total.GU,
+             TSU = out.tb$TSU.GU / Total.GU,
+             LND = out.tb$GU.LND / Total.GU,
+             FFE = out.tb$GU.FFE / Total.GU,
+             SPL = out.tb$GU.SPL / Total.GU)] 
+write.csv(out.tb,file = file.path(US.Eng.dir, data.dir, 'R.output',
+                                  paste0(event.name,'.GU.by.peril',today,'.csv')))
+
+temp <- out.tb[,.(EventID, SHK.GU, LIQ.GU, TSU.GU, GU.LND, GU.FFE, GU.SPL)]
+temp[,':='(SHK=SHK.GU /  million,
+           LIQ=LIQ.GU / million,
+           TSU=TSU.GU / million,
+           LND=GU.LND / million,
+           FFE=GU.FFE / million,
+           SPL=GU.SPL / million)]
+DT <- as.data.table(melt(temp,id.vars = 'EventID', 
+                         measure.vars = c('SHK','LIQ','TSU', 'LND', 'FFE', 'SPL'),
+                         variable.name = 'Peril',
+                         value.name = 'GU.mUSD'))
+DT$Peril <- factor(DT$Peril,levels=c('SHK','LIQ','TSU','LND', 'FFE', 'SPL'))
+```
+
+```{r GUByPeril_PieChart, fig.width=5,fig.height=5}
+ggplot(DT, aes(x = "", y = GU.mUSD, fill = Peril))+
+  geom_bar(width=1, stat='identity', fill = 'darkgreen' colour = 'white')+
+  coord_polar(theta = "y")+
+  labs(title = paste0(event.name,'\nGround up loss, mUSD'), x='',y='')
+```
+
+For earthquake **`r event.name`**, the total ground up loss 
+is **`r formatC(Total.GU/million,format='f',digits=0,big.mark=',')`** million USD,
+by running EQSim using `r IED.version` IED. The ground up loss splits by peril are:
+
+* Shake: `r paste0(formatC(100 * (out.tb$SHK),format='f',digits=0),'%')` 
+* Liquefaction: `r paste0(formatC(100*out.tb$LIQ,format='f',digits=0), '%')` 
+* Tsunami: `r paste0(formatC(100*out.tb$TSU,format='f',digits=0), '%')` 
+* Landslide: `r paste0(formatC(100*out.tb$LND,format='f',digits=0), '%')` 
+* FireFollowingEarthquake: `r paste0(formatC(100*out.tb$FFE,format='f',digits=0), '%')` 
+* Sprinkler: `r paste0(formatC(100*out.tb$SPL,format='f',digits=0), '%')` 
+
+## Ground up loss by coverage
+
+```{r GU.By.coverage, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(bldg.GU = sum(SHK.GU.A+LIQ.GU.A+TSU.GU.A+LND.GU.A+FFE.GU.A+SPL.GU.A),
+                        cont.GU = sum(SHK.GU.C+LIQ.GU.C+TSU.GU.C+LND.GU.C+FFE.GU.C+SPL.GU.C),
+                        time.GU = sum(SHK.GU.D+LIQ.GU.D+TSU.GU.D+LND.GU.D+FFE.GU.D+SPL.GU.D)), by = EventID]
+out.tb[,':='(Bldg = bldg.GU/Total.GU,
+             Cont = cont.GU/Total.GU,
+             Time = time.GU/Total.GU)]
+write.csv(out.tb, file = file.path(US.Eng.dir, data.dir,'R.output',
+                                   paste0(event.name,'.GU.by.coverage',today,'.csv')))
+
+DT <- data.frame(GU.mUSD = c(out.tb$bldg.GU /  million,
+                             out.tb$cont.GU / million,
+                             out.tb$time.GU / million),
+                 Coverage = c('bldg','cont','time'))
+DT$Coverage <- factor(DT$Coverage, levels=c('bldg','cont','time'), ordered = T)
+```
+
+```{r GU.By.coverage_PieChart, fig.width=5,fig.height=5}
+ggplot(DT, aes(x = "", y = GU.mUSD, fill = Coverage))+
+  geom_bar(width=1, stat='identity', fill = 'darkgreen', colour = 'white')+
+  coord_polar(theta = "y")+
+  labs(title = paste0(event.name, '\nGround up loss, mUSD'),x='',y='')+
+  scale_fill_manual(values=c('#105984','#C6DB42','#39BEB5'))
+```
+
+For earthquake **`r event.name`**, the total ground 
+up loss is **`r formatC(Total.GU/million,format='f',digits=0,big.mark=',')`** million USD,
+by running EQSim using `r IED.version` IED. The ground up loss splits by coverage are:
+
+* building: `r paste0(formatC(100 * out.tb$Bldg, format='f',digits=0), '%')` 
+* content : `r paste0(formatC(100*out.tb$Cont,format='f',digits=0), '%')` 
+* time: `r paste0(formatC(100*out.tb$Time,format='f',digits=0), '%')` 
+
+Sum up the ground up losses and 
+total replacement values on an affected IED grid. The 
+mean damage ratio is calculated by dividing the
+total loss by the total replacement
+value.
+
+```{r MDR.By.Coverage, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(bldg.GU = sum(SHK.GU.A+LIQ.GU.A+TSU.GU.A+LND.GU.A+FFE.GU.A+SPL.GU.A),
+                        cont.GU = sum(SHK.GU.C+LIQ.GU.C+TSU.GU.C+LND.GU.C+FFE.GU.C+SPL.GU.C),
+                        time.GU = sum(SHK.GU.D+LIQ.GU.D+TSU.GU.D+LND.GU.D+FFE.GU.D+SPL.GU.D)), 
+                      by = .(GridID)]
+setkey(out.tb, GridID)
+load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.RData'))
+# Grid.RV is a data.table with 4 columns
+# GridID, RVA, RVC, RVD
+setkey(Grid.RV, GridID)
+affected.grids <- Grid.RV[out.tb,]
+out.tb <- affected.grids[,.(bldg.GU = sum(bldg.GU),bldg.RV = sum(RVA),
+                            cont.GU = sum(cont.GU),cont.RV = sum(RVC),
+                            time.GU = sum(time.GU),time.RV = sum(RVD))]
+out.tb[,':='(bldg.MDR = bldg.GU / bldg.RV,
+             cont.MDR = cont.GU / cont.RV,
+             time.MDR = time.GU / time.RV)]
+rm(affected.grids, Grid.RV)
+write.csv(out.tb, 
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.MDR.by.coverage.',today,'.csv')))
+DT <- data.frame(MDR = c(out.tb$bldg.MDR,
+                         out.tb$cont.MDR,
+                         out.tb$time.MDR),
+                 Coverage = c('bldg','cont','time'))
+DT$Coverage <- factor(DT$Coverage, levels=c('bldg','cont','time'), ordered = T)
+```
+
+```{r MDR.By.Coverage.BarChart, fig.width=5,fig.height=5}
+ggplot(DT, aes(x = Coverage, y = MDR))+
+  geom_bar(stat='identity', fill = 'darkgreen', colour = 'white')+
+  labs(title = event.name,x='',y='Mean damage raio')
+```
+
+## Ground up loss by State
+
+```{r GU.By.STATE, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D+
+                               LIQ.GU.A+LIQ.GU.C+LIQ.GU.D+
+                               TSU.GU.A+TSU.GU.C+TSU.GU.D+
+                               LND.GU.A+LND.GU.C+LND.GU.D+
+                               FFE.GU.A+FFE.GU.C+FFE.GU.D+
+                               SPL.GU.A+SPL.GU.C+SPL.GU.D)), by = stateFIPS]
+setkey(out.tb, stateFIPS)
+# STATE.table is loaded in 'LoadSTATETable' section
+out.tb <- STATE.table[out.tb,]
+out.tb[, STATE.share := GU / Total.GU]
+out.tb <- out.tb[order(-1*GU),]
+write.csv(out.tb,
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.GU.by.STATE.',today,'.csv')))
+count <- min(c(5,nrow(out.tb)))
+```
+
+Out of **`r length(unique(STATE.table$State))`**  States,
+the top `r count` damaged STATE are listed below.
+
+```{r GU.by.STATE.table, echo=F,results='asis'}
+pandoc.table(as.data.frame(out.tb[1:count, .(State, FIPS, 
+GU.mUSD = GU/million, GU.pct = round(STATE.share*100))]), style='rmarkdown')
+```
+
+```{r GU.by.STATE.map.prepare, echo = FALSE, include =FALSE}
+att.tb <- STATE.shp@data 
+GU.loss <- rep(0,nrow(att.tb))
+for(i in 1:nrow(out.tb))
+{
+  indx <- which(att.tb$STATE == out.tb$State[i])
+  GU.loss[indx] <- out.tb$GU[i]
+}
+att.tb <- cbind(att.tb, GU.loss)
+original.STATE.shp <- STATE.shp
+STATE.shp@data <- att.tb #replace original attribute table with updated one
+STATE.shp <- STATE.shp[which(STATE.shp$GU.loss>0),]
+writeOGR(STATE.shp,dsn=file.path(US.Eng.dir, data.dir,'maps'),
+         layer = paste0(event.name,'.GU.by.STATE.',today),
+         overwrite_layer = T,driver='ESRI Shapefile')
+```
+
+```{r GU.by.STATE.map.plot,fig.width=12,fig.height=8,warning = FALSE}
+leaflet() %>%
+addProviderTiles(provider = 'Stamen.TonerLite', group = 'Toner Lite')%>%
+addTiles(group = 'OSM')%>%
+addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
+
+pal <- colorBin(palette = c("#E7E742","#E72C29"), 
+                domain = range(STATE.shp$GU.loss), bins = 5)
+m <- addPolygons(map=m, data=STATE.shp, 
+                 color = pal(STATE.shp$GU.loss), 
+                 fill = TRUE, weight = 2, fillOpacity = 0.5, 
+                 group = "GUL", 
+                 popup = paste(STATE.shp$NAME, " GUL: mUSD", 
+                               paste0(formatC(STATE.shp$GU.loss/million,big.mark=',',format='f',digits=0))))
+m <- addPolygons(map=m, data=original.STATE.shp, 
+                 color = "green", fill = FALSE, 
+                 weight = 1, fillOpacity = 1, group = "STATE")
+m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
+                      overlayGroups = c("GUL", "STATE"),
+                      options = layersControlOptions(collapsed = FALSE))
+
+m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
+                   fill=F, color = 'darkblue',
+                   popup=paste0('Segment: ',rupture.srdf$segment))
+m <- addLegend(map = m, 
+               position = "bottomleft", pal = pal, 
+               values = range(STATE.shp$GU.loss), opacity = 1,
+               title = 'GU, USD')
+
+m 
+```
+
+# Shake loss distributions
+
+## Shake total GU loss map 
+
+```{r SHK.GU.by.Grid.prepare, echo = FALSE, include =FALSE}
+SHK.loss <- F
+SHK.GU.dt <- EQsim.data[,.(GU = sum(SHK.GU.A+SHK.GU.C+SHK.GU.D),
+                           GU.A = sum(SHK.GU.A),
+                        Lat = min(Lat), Lon = min(Long)),by=.(GridID)]
+SHK.GU.dt <- SHK.GU.dt[GU > 0, ]
+SHK.GU.dt[, GU.mUSD := GU / million]
+if(sum(SHK.GU.dt$GU.mUSD) > 0) {
+  SHK.loss <- T
+  LongMin <- floor(min(SHK.GU.dt$Lon))
+  LongMax <- ceiling(max(SHK.GU.dt$Lon))
+  LatMin <- floor(min(SHK.GU.dt$Lat))
+  LatMax <- ceiling(max(SHK.GU.dt$Lat))
+  background <- raster(xmn = LongMin, xmx = LongMax,
+                       ymn = LatMin, ymx = LatMax,
+                       resolution = raster.res)
+  rst <- rasterize(SHK.GU.dt[,.(Lon,Lat)], background, fun = sum,
+                   field = SHK.GU.dt[,.(GU.mUSD)])
+  writeRaster(rst, filename = file.path(US.Eng.dir, data.dir,'maps',
+                                        paste0(event.name,'.SHK.GU.mUSD.',today,'.img')),
+           format = 'HFA',overwrite = T)
+  setkey(SHK.GU.dt, GridID)
+  load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.RData'))
+  setkey(Grid.RV, GridID)
+  # Grid.RV is a data.table with 4 columns
+  # GridID, bldg.RV, cont.RV, time.RV
+  SHK.GU.dt <- Grid.RV[SHK.GU.dt,]
+  SHK.GU.dt[,CovA.MDR := GU.A / RVA]
+  MDR.rst <- rasterize(SHK.GU.dt[,.(Lon,Lat)], background,fun=mean,
+                       field = SHK.GU.dt[,.(CovA.MDR)])
+  writeRaster(MDR.rst, filename = file.path(US.Eng.dir, data.dir,'maps',
+                                        paste0(event.name,'.SHK.CovA.MDR.',today,'.img')),
+           format = 'HFA',overwrite = T)
+}
+```
+
+Total ground up loss due to ground shaking is 
+`r paste0(formatC(sum(SHK.GU.dt$GU.mUSD),format='f',big.mark=',',digits=0))` million USD.
+Shake loss is total ground up,  including building, content and business
+interruption losses. Mean damage ratio shown in the map is for building damage only.
+It is calculated by the following equation for each 1km grid.
+
+$$\frac{Total.CovA.GU.loss}{Total.CovA.Rep.Value}$$
+
+```{r SHK.GU.by.GRID.map,fig.width=12,fig.height=8,warning = FALSE}
+if(SHK.loss)
+{
+  pal <- colorBin(palette = c("#EDE700","#77A226"), domain = range(SHK.GU.dt$GU.mUSD), bins = 5)
+  MDR.pal <- colorBin(palette = c("#85D2F5","#F33717"), domain = range(SHK.GU.dt$CovA.MDR), bins = 5)
+
+  leaflet() %>%
+  addProviderTiles(provider = 'Stamen.TonerLite',
+                   group = 'Toner Lite') %>%
+  addTiles(group = 'OSM')%>%
+  addProviderTiles(provider = 'MapQuestOpen.Aerial',group='Aerial')%>%
+  addRasterImage(rst, colors = pal, opacity = 0.5, group = "SHK.GU")%>%
+  addRasterImage(MDR.rst, colors = MDR.pal, opacity = 0.5, group = "CovA.MDR")%>%
+  addPolygons(data=rupture.srdf, weight = 2, 
+              fill=F, color = 'darkblue',
+              popup=paste0('Segment: ',rupture.srdf$segment)) %>%
+  addLayersControl(baseGroups = c("Aerial","Toner Lite","OSM"), 
+                   overlayGroups = c("SHK.GU",'CovA.MDR'),
+                   options = layersControlOptions(collapsed = FALSE))%>%
+  addLegend(position = "bottomleft", pal = MDR.pal, 
+            values = range(SHK.GU.dt$CovA.MDR), opacity = 1,
+            title = 'Mean damage ratio')%>%
+  addLegend(position = "bottomleft", pal = pal, 
+            values = range(SHK.GU.dt$GU.mUSD), opacity = 1,
+            title = 'GU, mUSD')
+}
+```
+
+## Shake total GU loss by height
+
+Total ground up loss (buidling + content + time) caused by ground shaing
+is aggregated by building height.
+
+```{r SHK.GU.By.Height, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = Height]
+write.csv(out.tb[order(-1*GU),],
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.GU.by.height.',today,'.csv')))
+
+out.tb[,GU.mUSD:=GU/million]
+out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+```
+
+```{r SHK.GU.By.Height.PieChart, fig.width=7,fig.height=5}
+ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = Height))+
+  geom_bar(stat='identity',fill = 'darkgreen', colour = 'white', width = 1)+
+  coord_polar(theta= 'y')+
+  scale_fill_manual(values=c('#A9C0DC','#6599CB','#0777B5','#0D639B'))+
+  labs(title = paste0(event.name, '\nShake ground up loss, mUSD'),x='',y='')
+```
+
+```{r SHK.MDR.By.Height, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = .(GridID,Height)]
+# Grid.H.RV is a data.table with 5 columns
+# GridID, Height, RVA, RVC, RVD
+load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.Height.RData'))
+Grid.H.RV[, RV:=RVA+RVC+RVD]
+setkey(out.tb, GridID, Height)
+setkey(Grid.H.RV, GridID, Height)
+affected.grids <- Grid.H.RV[out.tb,]
+out.tb <- affected.grids[,.(RV = sum(RV), GU = sum(GU)), by = Height]
+out.tb[,MDR := GU / RV]
+out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+write.csv(out.tb, 
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.MDR.by.Height.',today,'.csv')))
+rm(Grid.H.RV, affected.grids)
+```
+
+```{r SHK.MDR.By.Height.BarChart, fig.width=6,fig.height=5}
+ggplot(out.tb, aes(x = Height, y = MDR ))+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+
+  labs(title = event.name,x='Height',y='Shake MDR')+
+  coord_flip()
+```
+
+## Shake total GU loss by line of business
+
+Total ground up loss (buidling + content + time) caused by ground shaing
+is aggregated by line of business. 
+
+```{r SHK.GU.By.LOB, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = BC]
+write.csv(out.tb[order(-1*GU),],
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.GU.by.LOB.',today,'.csv')))
+
+out.tb[,GU.mUSD:=GU/million]
+```
+
+```{r SHK.GU.By.LOB.PieChart, fig.width=7,fig.height=5}
+ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = BC))+
+  geom_bar(stat='identity',fill = 'darkgreen', colour = 'white', width = 1)+
+  coord_polar(theta= 'y')+
+  labs(title = paste0(event.name, '\nShake ground up loss, mUSD'),x='',y='')
+```
+
+```{r SHK.MDR.By.LOB, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = .(GridID,BC)]
+# data.table Grid.LOB.RV has 5 columns
+# GridID, BC, RVA, RVC, RVD
+load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.LOB.RData'))
+Grid.LOB.RV[, RV:=RVA+RVC+RVD]
+setkey(Grid.LOB.RV, GridID, BC)
+setkey(out.tb, GridID, BC)
+affected.grids <- Grid.LOB.RV[out.tb,]
+out.tb <- affected.grids[,.(GU = sum(GU), RV = sum(RV)), by = BC]
+out.tb[,MDR:=GU/RV]
+write.csv(out.tb, 
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.MDR.by.LOB.',today,'.csv')))
+rm(Grid.LOB.RV, affected.grids)
+```
+
+```{r SHK.MDR.By.LOB.BarChart, fig.width=5,fig.height=3.5}
+ggplot(out.tb, aes(x = BC, y = MDR))+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+
+  labs(title = event.name,x='Line of business',y='Shake MDR')
+```
+
+## Shake total GU loss by construction
+
+Total ground up loss caused by ground shaing
+is aggregated by construction type and coverage. 
+
+```{r SHK.GU.By.CC, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(SHK.bldg=sum(SHK.GU.A),
+                        SHK.cont=sum(SHK.GU.C),
+                        SHK.time=sum(SHK.GU.D)),by = CC]
+write.csv(out.tb[order(-1*SHK.bldg),],
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.GU.by.CC.',today,'.csv')))
+
+DT <- melt(out.tb,id.vars = 'CC', variable.name = 'Coverage', value.name = 'GU.mUSD')
+DT[,GU.mUSD := GU.mUSD / million]
+```
+
+```{r SHK.GU.By.CC.BarChart, fig.width=8,fig.height=5}
+ggplot(DT, aes(x = factor(CC), y = GU.mUSD))+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+
+  facet_grid(Coverage ~ .)+
+  labs(title = event.name,x='Construction',y='Ground up loss, mUSD')+
+  scale_y_continuous(labels=comma)
+```
+
+```{r SHK.MDR.By.CC, include = FALSE, echo=FALSE}
+# split by construction (damage ratio)
+out.tb <- EQsim.data[,.(SHK.bldg=sum(SHK.GU.A),
+                        SHK.cont=sum(SHK.GU.C),
+                        SHK.time=sum(SHK.GU.D)),by = .(CC,GridID)]
+setkey(out.tb, CC, GridID)
+# Grid.CC.RV is a data.table with 5 columns
+# GridID, CC, RVA, RVC, RVD
+load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.CC.RData'))
+setkey(Grid.CC.RV, CC, GridID)
+# Get RV on affected grids
+affected.grids <- Grid.CC.RV[out.tb,]
+out.tb <- affected.grids[,.(bldg.GU = sum(SHK.bldg),
+                            bldg.RV = sum(RVA),
+                            cont.GU = sum(SHK.cont),
+                            cont.RV = sum(RVC),
+                            time.GU = sum(SHK.time),
+                            time.RV = sum(RVD)),by = CC]
+out.tb[,':='(bldg.MDR = bldg.GU / bldg.RV,
+             cont.MDR = cont.GU / cont.RV,
+             time.MDR = time.GU / time.RV)]
+write.csv(out.tb, 
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.MDR.by.CC.','.csv')))
+rm(affected.grids, Grid.CC.RV)
+DT <- melt(out.tb, id.vars = 'CC', measure.vars = c('bldg.MDR',
+                                                    'cont.MDR',
+                                                    'time.MDR'),
+           variable.name = 'Coverage', value.name = 'MDR')
+```
+
+```{r SHK.MDR.By.CC.BarChart, fig.width=8,fig.height=5}
+ggplot(DT, aes(x = factor(CC), y = MDR))+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+ 
+  facet_grid(Coverage ~ .)+
+  labs(title = event.name,x='Construction',y='Mean damage raio')
+```
+
+## Shake total GU loss by occupancy
+
+Total ground up loss caused by ground shaing
+is aggregated by occupancy type and coverage. 
+
+```{r SHK.GU.By.OCC, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(SHK.bldg=sum(SHK.GU.A),
+                        SHK.cont=sum(SHK.GU.C),
+                        SHK.time=sum(SHK.GU.D)),by = OCC]
+write.csv(out.tb[order(-1*SHK.bldg),],
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.GU.by.OCC.','.csv')))
+
+DT <- melt(out.tb,id.vars = 'OCC', variable.name = 'Coverage', value.name = 'GU.mUSD')
+DT[,GU.mUSD := GU.mUSD / million]
+```
+```{r SHK.GU.By.OCC.BarChart, fig.width=8,fig.height=10}
+ggplot(DT, aes(x = factor(OCC), y = GU.mUSD))+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+ 
+  facet_grid(. ~ Coverage)+ coord_flip() +
+  labs(title = paste0(event.name, ': GU Loss'),x='Occupancy',y='Ground up loss, mUSD')+
+  scale_y_continuous(labels=comma)
+```
+```{r SHK.MDR.By.OCC, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(SHK.bldg=sum(SHK.GU.A),
+                        SHK.cont=sum(SHK.GU.C),
+                        SHK.time=sum(SHK.GU.D)),by = .(OCC,GridID)]
+setkey(out.tb, OCC, GridID)
+# Grid.OCC.RV is a data.table with 5 columns
+# GridID, OCC, RVA, RVC, RVD
+load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.OCC.RData'))
+setkey(Grid.OCC.RV, OCC, GridID)
+affected.grids <- Grid.OCC.RV[out.tb,]
+out.tb <- affected.grids[,.(bldg.GU = sum(SHK.bldg),
+                            bldg.RV = sum(RVA),
+                            cont.GU = sum(SHK.cont),
+                            cont.RV = sum(RVC),
+                            time.GU = sum(SHK.time),
+                            time.RV = sum(RVD)),by = OCC]
+out.tb[,':='(bldg.MDR = bldg.GU / bldg.RV,
+             cont.MDR = cont.GU / cont.RV,
+             time.MDR = time.GU / time.RV)]
+write.csv(out.tb, file = file.path(US.Eng.dir, data.dir, 'R.output',
+                                   paste0(event.name,'.SHK.MDR.by.OCC.',today,'.csv')))
+rm(Grid.OCC.RV, affected.grids)
+DT <- melt(out.tb, id.vars = 'OCC', measure.vars = c('bldg.MDR',
+                                                    'cont.MDR',
+                                                    'time.MDR'),
+           variable.name = 'Coverage', value.name = 'MDR')
+```
+
+```{r SHK.MDR.By.OCC.BarChart, fig.width=8,fig.height=10}
+ggplot(DT, aes(x = factor(OCC), y = MDR))+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+ 
+  facet_grid(. ~ Coverage)+coord_flip()+
+  labs(title = paste0(event.name, ': mean damage ratio'),x='Occupancy',y='Mean damage raio')
+```
+
+## Shake total GU loss distribution by ground motion intensity
+
+```{r SHK.Loss.By.SA03, include = FALSE, echo=FALSE}
+SA03.breaks <- c(seq(0,0.2,by=0.01),
+                 seq(0.22, 0.4, by = 0.02),
+                 seq(0.5, 1.0, by = 0.1),
+                 seq(1.2, 5, by = 0.2), 10)
+
+low.rise.loss <- EQsim.data[Height == height.band.names[1], .(GridID,SHK.GU.A)]
+setkey(low.rise.loss, GridID)
+low.rise.loss <- int.Hist[low.rise.loss, .(SA03, SHK.GU.A)]
+Total.SHK.GU.Bldg <- sum(low.rise.loss$GU)
+low.rise.loss[, contribution := GU / Total.SHK.GU.Bldg]
+# Assign categorical tag 
+for(i in 2:length(SA03.breaks)){
+  b <- SA03.breaks[i]
+  a <- SA03.breaks[i-1]
+  low.rise.loss[a <= SA03 & SA03 <= b, group := paste0(a, ' - ', b)]
+}
+low.rise.loss$group <- factor(low.rise.loss$group, ordered = T)
+setkey(low.rise.loss, SA03)
+low.rise.loss[, cumusum.contri := cumsum(contribution)]
+write.csv(low.rise.loss, file = file.path(US.Eng.dir, data.dir, 'R.output', 
+                                          paste0(event.name,'.Low-rise.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
+```
+
+```{r SHK.Loss.By.SA03.PMF, fig.width = 12, fig.height = 3}
+ggplot(low.rise.loss, aes(x = group))+
+  geom_histogram(aes(weight = contribution), fill = 'darkgreen', 
+                 colour = 'white', width = 0.5) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = 'Shake low rise building loss distribution', 
+       x = 'Sa 0.3 sec, g', y = 'Loss contribution')
+```
+
+```{r SHK.Loss.By.SA03.CDF, fig.width = 12, fig.height = 3}
+ggplot(low.rise.loss, aes(x = group, y = cum.contri))+
+  geom_line(colour='darkgreen') + 
+  labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'Cumu. sum contribution')
+```
+
+If mid-rise loss contributes exceed 10% of total ground
+up loss, loss distribution by $S_a 1.0 s$ is included
+in this section.
+
+```{r SHK.Loss.By.SA1, include = FALSE, echo=FALSE}
+bldg.Total.SHK.GU <- sum(EQsim.data$SHK.GU.A)
+mid.rise.loss <- EQsim.data[Height == height.band.names[2], .(GridID,SHK.GU.A)]
+setkey(mid.rise.loss, GridID)
+mid.rise.loss <- int.Hist[mid.rise.loss, .(SA1, SHK.GU.A)]
+bldg.mid.rise.SHK.GU <- sum(mid.rise.loss$SHK.GU.A)
+decent.mid.rise.loss <- F
+if(bldg.mid.rise.SHK.GU / bldg.Total.SHK.GU > 0.1)
+{
+  # if mid rise building contribute more than 10% total loss
+  # plot mid-rise loss distribution
+  decent.mid.rise.loss <- T
+  bin.edges <- c(0, 0.02, 0.04, 0.06, 0.1, 0.15,
+                 0.2,0.25,0.3,0.4,0.5,0.6,0.8,1.0,
+                 1.5,2, 3, 4, 100) 
+  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+  bin.names <- c(paste0('< ' ,bin.edges[2],' g'),
+                 paste0(bin.edges[2:(length(bin.edges)-2)],' - ',
+                        bin.edges[3:(length(bin.edges)-1)]),
+                 paste0('> ',bin.edges[length(bin.edges)-1],' g'))
+  bins <- data.frame(bin.names, bin.centers)
+  # assign intensity level to EQsim.data
+  mid.rise.loss[SA1 == bin.edges[1], GM.level := bin.names[1]]
+  for(i in 2:length(bin.edges)) {
+    mid.rise.loss[SA1 <= bin.edges[i] & 
+                  SA1 > bin.edges[i-1], GM.level := bin.names[i-1]]
+  }
+  DT <- mid.rise.loss[,.(GU = sum(SHK.GU.A)), by = GM.level]
+  Total.SHK.GU.Bldg <- sum(DT$GU)
+  DT[, contribution := GU / Total.SHK.GU.Bldg]
+  DT[, bin.center := bins$bin.centers[match(DT$GM.level, bins$bin.names)]]
+  setkey(DT, bin.center)
+  DT[, cum.contri := cumsum(contribution)]
+  write.csv(DT, file = file.path(US.Eng.dir, data.dir, 'R.output', 
+                                 paste0(event.name,'.Mid-rise.Bldg.SHK.GU.distribution.by.Sa1.',today,'.csv')))
+}
+```
+
+```{r SHK.Loss.By.SA1.PMF, fig.width = 12, fig.height = 3}
+if(decent.mid.rise.loss) {
+  ggplot(DT, aes(x = as.factor(bin.center), y = contribution))+
+    geom_bar(stat = 'identity',width = 0.2,colour='white',fill='darkgreen') + 
+    labs(title = 'Shake mid-rise building loss distribution', x = 'Sa 1.0 sec, g', y = 'Loss contribution')
+}
+```
+
+```{r SHK.Loss.By.SA1.CDF, fig.width = 12, fig.height = 3}
+if(decent.mid.rise.loss) {
+  ggplot(DT, aes(x = bin.center, y = cum.contri))+
+    geom_line(colour = 'darkgreen') + geom_point() +
+    labs(title = 'Shake mid-rise building loss distribution', x = 'Sa 1.0 sec, g',
+         y = 'Cumsum contribution')
+}
+```
+## Shake total GU loss distribution by distance to rupture
+
+```{r SHK.GU.Dist.prepare, include = F, echo = F}
+Grid.loss <- EQsim.data[, .(GU = sum(SHK.GU.A + SHK.GU.C + SHK.GU.D)), keyby=GridID]
+DT <- int.Hist[Grid.loss, .(GridID, lat, lon, GU, dist_surf)]
+bin.edges <- seq(from = min(DT$dist_surf), to = max(DT$dist_surf), by = 3)
+bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+bin.names <- paste(bin.edges[-(length(bin.edges))], '-', bin.edges[-1])
+bins <- data.frame(bin.names, bin.centers)
+DT[dist_surf == bin.edges[1], dis := bin.names[1]]
+for(i in 2:length(bin.edges)){
+  DT[bin.edges[i-1] < dist_surf & dist_surf <= bin.edges[i], 
+            dis := bin.names[i]]
+}
+plot.df <- DT[, .(GU = sum(GU)), by = dis]
+GU.tot <- sum(plot.df$GU)
+plot.df[, contribution := GU / GU.tot]
+plot.df[, bin.center := bins$bin.centers[match(plot.df$dis, bins$bin.names)]]
+setkey(plot.df, bin.center)
+plot.df[, cum.contri := cumsum(contribution)]
+rm(Grid.loss)
+DT[, GU.pct := GU / GU.tot] # for making map in section 'SHK.GU.distribution.map'
+```
+
+```{r SHK.GU.Distance.Distri.PMF, fig.width = 10, fig.height = 5}
+ggplot(plot.df, aes(x = as.factor(bin.center), y = contribution)) +
+  geom_bar(stat = 'identity', width = 0.2, fill = 'darkgreen', colour = 'white') +
+  labs(x = 'Distance to surface rupture, km', y = 'Contribution',
+       title = 'Shake total GU loss distribution')
+```
+
+```{r SHK.GU.Distance.Distri.CDF, fig.width = 10, fig.height = 5}
+ggplot(plot.df, aes(x = bin.center, y = cum.contri)) +
+  geom_line(colour = 'darkgreen')  + geom_point() +
+  labs(x = 'Distance to surface rupture, km', y = 'Cumusum contribution',
+       title = 'Shake total GU loss distribution')
+```
+
+```{r SHK.GU.distribution.map.prepare, fig.width = 12, fig.height = 8, warning = F}
+# DT is built in section SHK.GU.Dist.prepare
+LongMin <- floor(min(DT$lon))
+LongMax <- ceiling(max(DT$lon))
+LatMin <- floor(min(DT$lat))
+LatMax <- ceiling(max(DT$lat))
+background <- raster(xmn = LongMin, xmx = LongMax,
+                     ymn = LatMin, ymx = LatMax,
+                     resolution = raster.res)
+rst <- rasterize(DT[,.(lon,lat)], background, fun = mean,
+                 field = DT[,.(GU.pct)])
+writeRaster(rst, filename = file.path(US.Eng.dir, data.dir,'maps',
+                                      paste0(event.name,'.SHK.GU.by.Grid.contribution.',today,'.img')),
+            format = 'HFA',overwrite = T)
+```
+
+```{r SHK.GU.distribution.map, fig.width = 12, fig.height = 8, warning = F}
+value.range <- c(minValue(rst), maxValue(rst))
+pal <- colorBin(palette = c("#EDE700","#77A226"),
+                domain = value.range, bins = 5)
+leaflet() %>%
+  addProviderTiles(provider = 'Stamen.TonerLite', group = 'Toner Lite') %>%
+  addTiles(group = 'OSM') %>%
+  addPolygons(data=rupture.srdf, weight = 2, 
+              fill=F, color = 'darkblue',
+              popup=paste0('Segment: ',rupture.srdf$segment)) %>%
+  addProviderTiles(provider = 'MapQuestOpen.Aerial',group='Aerial')%>%
+  addRasterImage(rst, colors = pal, opacity = 0.5, group = "grid.contri")%>%
+  addLayersControl(baseGroups = c("Aerial","Toner Lite","OSM"), 
+                   overlayGroups = c('grid.contri'),
+                   options = layersControlOptions(collapsed = FALSE))%>%
+  addLegend(position = "bottomleft", pal = pal, 
+            values = value.range, opacity = 1,
+            title = 'Grid contribution')
+```
+
+## Shake total GU loss Distribution by soil type
+```{r SHK.GU.Distri.by.Soil.prepare, include = F, echo = F}
+Grid.loss <- EQsim.data[, .(GU = sum(SHK.GU.A + SHK.GU.C + SHK.GU.D)), keyby=GridID]
+DT <- int.Hist[Grid.loss, .(GU, Soil)]
+tot.GU <- sum(DT$GU)
+DT[, contribution := GU / tot.GU]
+setkey(DT, Soil)
+DT[, cumsum.contri := cumsum(contribution)]
+```
+```{r SHK.GU.Distri.by.Soil.PMF, fig.width = 10, fig.height = 5}
+p <- ggplot(DT, aes(Soil)) + 
+  geom_bar(aes(weight = contribution), fill = 'darkgreen', 
+           binwidth= 0.5, colour = 'white')+
+  labs(y = 'Contribution', x = '')
+ggplot(DT, aes(x = Soil, y = cumsum.contri)) + geom_line(colour = 'darkgreen')
+```
+## Shake Content Loss Distribution 
+hist()
+```{r SHK.Cont.by.H.prepare,include=F,echo=F}
+temp <- EQsim.data[,.(cont.GU=sum(SHK.GU.C)),keyby=Height]
+temp[,cont.GU:=cont.GU/million]
+temp$Height <- factor(temp$Height, levels=height.band.names, ordered=T)
+tot.cont.GU <- sum(temp$cont.GU)
+temp[, contribution := cont.GU / tot.cont.GU]
+mid.rise.contribution <- temp[Height == height.band.names[2], contribution]
+high.rise.contribution <- temp[Height == height.band.names[3], contribution]
+tall.contribution <- temp[Height == height.band.names[4], contribution]
+```
+
+```{r SHK.cont.GU.By.Height, fig.width=7,fig.height=5}
+ggplot(temp, aes(x = "", y = cont.GU, fill = Height))+
+  geom_bar(stat='identity',width = 1)+
+  coord_polar(theta= 'y')+
+  scale_fill_manual(values=c('#A9C0DC','#6599CB','#0777B5','#0D639B'))+
+  labs(title = event.name,x='',y='Shake Content Ground Up Loss, mUSD')
+```
+
+### Low-rise Building Content Loss Distirbution
+
+```{r LR.Cont.by.bldg.prepare, include = FALSE, echo=FALSE}
+bin.edges <- c(seq(0,0.1,by=0.01),
+               seq(0.12, 0.5,by=0.02),
+               seq(0.6,1.0,by=0.1))
+num.bin.edges <- length(bin.edges)
+bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
+bins <- data.frame(bin.names, bin.centers)
+cont.damage <- EQsim.data[Height == height.band.names[1] &
+                          RVA > 0 & RVC > 0,
+                          .(GridID,SHK.MDR.A=SHK.GU.A / RVA,
+                            SHK.MDR.C=SHK.GU.C / RVC, SHK.GU.C)]
+setkey(cont.damage, GridID)
+cont.damage <- int.Hist[cont.damage, .(SA03, SHK.MDR.A, SHK.MDR.C, SHK.GU.C)]
+total.cont.loss <- cont.damage[,sum(SHK.GU.C)]
+if(total.cont.loss>0){
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SHK.MDR.A >= low.bound & SHK.MDR.A < up.bound, bldg.damage := bin.names[i]]
+  }
+  cont.damage[SHK.MDR.A == bin.edges[length(bin.edges)], bldg.damage := bin.names[length(bin.names)]]
+  cont.damage$bldg.damage <- factor(cont.damage$bldg.damage, levels = bin.names, ordered = T)
+  plot.df <- cont.damage[, .(GUC = sum(SHK.GU.C)), by = bldg.damage]
+  plot.df[, GUC.pct := GUC / total.cont.loss]
+  plot.df[, bin.center:= bins$bin.centers[match(plot.df$bldg.damage, bins$bin.names)]]
+  setkey(plot.df, bin.center)
+  plot.df[, cum.contri := cumsum(GUC.pct)]
+}
+```
+
+```{r LR.Cont.CovAMDR.PMF, fig.width = 12, fig.height = 6, results='asis'}
+if(total.cont.loss>0){
+ggplot(plot.df, aes(x=as.factor(bin.center),y=GUC.pct))+
+  geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+  labs(x='Building damage ratio',y='Contribution',
+       title = paste0(event.name,'\n Low-rise Content Loss \n Distribution by Building Damage'))
+}else{
+  cat('<span style="color:red">No shake content loss from low rise building.</span>')
+}
+```
+
+```{r LR.Cont.CovAMDR.CDF, fig.width = 10, fig.height = 6}
+if(total.cont.loss>0){
+ggplot(plot.df, aes(x=bin.center, y=cum.contri))+
+  geom_line(colour='darkgreen')+geom_point()+
+  labs(x='Building damage ratio',y='Cumusum contribution',
+       title = paste0(event.name,'\n Low-rise Content Loss \n Distribution by Building Damage'))
+}
+```
+
+```{r LR.Cont.by.Sa03.prepare, include = FALSE, echo=FALSE}
+if(total.cont.loss>0){
+  bin.edges <- c(seq(0,0.2,by=0.01),
+                 seq(0.22, 0.4, by = 0.02),
+                 seq(0.5, 1.0, by = 0.1),
+                 seq(1.2, 5, by = 0.2), 10)
+  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+  num.bin.edges <- length(bin.edges)
+  bin.names <- c(paste0('< ', bin.edges[2]),
+                 paste0(bin.edges[2:(num.bin.edges-2)], ' - ', 
+                        bin.edges[3:(num.bin.edges-1)]),
+                 paste0('> ', bin.edges[num.bin.edges-1]))
+  bins <- data.frame(bin.names, bin.centers)
+
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SA03 >= low.bound & SA03 < up.bound, Sa03.range := bin.names[i]]
+  }
+  plot.df <- cont.damage[, .(GUC = sum(SHK.GU.C)), by = Sa03.range]
+  plot.df[, GUC.pct := GUC / total.cont.loss]
+  plot.df[, bin.center := bins$bin.centers[match(plot.df$Sa03.range, bins$bin.names)]]
+  setkey(plot.df, bin.center)
+  plot.df[, cum.contri := cumsum(GUC.pct)]
+}
+```
+```{r LR.Cont.by.SA03.PMF, fig.width = 10, fig.height = 6}
+if(total.cont.loss>0){
+  ggplot(plot.df,aes(x=factor(bin.center), y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    labs(x='Sa 0.3s, g',y='Contribution',
+         title = paste0(event.name, '\n Low-rise Content Loss \n Distribution by Sa 0.3s'))
+}
+```
+
+```{r LR.Cont.by.SA03.CDF, fig.width = 10, fig.height = 6}
+if(total.cont.loss>0){
+    ggplot(plot.df, aes(x=bin.center, y= cum.contri))+
+      geom_line(colour='darkgreen')+geom_point()+
+      labs(x='Sa 0.3s, g',y='Cumusum Contribution',
+           title = paste0(event.name, '\n Low-rise Content Loss \n Distribution by Sa 0.3s'))
+}
+```
+
+
+### Mid-rise Building Content Loss Distiribution
+
+If mid-rise loss contributes exceed 10% of total ground
+up loss, loss distribution by building damage
+ratio and $S_a 1.0 s$ is included
+in this section.
+
+
+```{r MR.Cont.by.Bldg.prepare, include = FALSE, echo=FALSE}
+if(length(mid.rise.contribution) == 0){
+  skip.mid.rise.content = T
+}else if(mid.rise.contribution < 0.1) {
+  skip.mid.rise.content = T
+}else{
+  skip.mid.rise.content = F
+}
+if(!skip.mid.rise.content){
+  bin.edges <- c(seq(0,0.1,by=0.01),
+                 seq(0.12, 0.5,by=0.02),
+                 seq(0.6,1.0,by=0.1))
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+  bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
+  bins <- data.frame(bin.names, bin.centers)
+  cont.damage <- EQsim.data[Height == height.band.names[2] &
+                            RVA > 0 & RVC > 0,
+                            .(GridID,SHK.MDR.A = SHK.GU.A / RVA,
+                              SHK.MDR.C = SHK.GU.C / RVC,SHK.GU.C)]
+  setkey(cont.damage, GridID)
+  total.cont.loss <- cont.damage[,sum(SHK.GU.C)]
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SHK.MDR.A >= low.bound & SHK.MDR.A < up.bound, bldg.damage := bin.names[i]]
+  }
+  cont.damage[SHK.MDR.A == bin.edges[length(bin.edges)], bldg.damage := bin.names[length(bin.names)]]
+
+  plot.df <- cont.damage[, .(GUC = sum(SHK.GU.C)), by = bldg.damage]
+  plot.df[, GUC.pct := GUC / total.cont.loss]
+  plot.df[, bin.center := bins$bin.centers[match(plot.df$bldg.damage, bins$bin.names)]]
+  setkey(plot.df, bin.center) # plot.df is ordered ascendingly by bin.center 
+  plot.df[, cum.contri := cumsum(GUC.pct)]
+}
+```
+
+```{r MR.Cont.by.bldg.PMF, fig.width = 10, fig.height = 6, results = 'asis'}
+if(!skip.mid.rise.content){
+  ggplot(plot.df,aes(x=factor(bin.center),y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    labs(x='Building damage ratio',y='Contribution',
+         title = paste0(event.name, '\n Mid-rise Content Loss \n Distribution by Building Damage'))
+}else{
+  cat('<span style="color:red">No shake content loss is from mid-rise building.</span>')
+}
+```
+
+```{r MR.Cont.by.bldg.CDF, fig.width = 10, fig.height = 6}
+if(!skip.mid.rise.content){
+    ggplot(plot.df,aes(x=bin.center, y=cum.contri))+
+      geom_line(colour='darkgreen')+geom_point()+
+      labs(x='Building damage ratio',y='CumuSum of Contribution',
+           title = paste0(event.name, '\n Mid-rise Content Loss \n Distribution by Building Damage'))
+}
+```
+
+```{r MR.cont.by.sa1.prepare,include=F,echo=F}
+if(!skip.mid.rise.content){
+  bin.edges <- c(seq(0,0.2,by=0.01),
+            seq(0.22, 0.4, by = 0.02),
+            seq(0.5, 1.0, by = 0.1),
+            seq(1.2, 4, by = 0.2), 10)
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+  bin.names <- c(paste0('< ',bin.edges[2]),
+                 paste0(bin.edges[2:(num.bin.edges-2)], ' - ', bin.edges[3:(num.bin.edges-1)]),
+                 paste0('> ',bin.edges[num.bin.edges-1]))
+
+  bins <- data.frame(bin.names, bin.centers)
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SA1 >= low.bound & SA1 < up.bound, Sa1.range := bin.names[i]]
+  }
+  cont.damage[SA1 == bin.edges[length(bin.edges)], Sa1.range := bin.names[length(bin.names)]]
+
+  plot.df <- cont.damage[, .(GUC = sum(SHK.GU.C)), by = Sa1.range]
+  plot.df[, GUC.pct := GUC / total.cont.loss]
+  plot.df[, bin.center := bins$bin.centers[match(plot.df$Sa1.range, bins$bin.names)]]
+  setkey(plot.df, bin.center)
+  plot.df[, cum.contri := cumsum(GUC.pct)]
+}
+```
+
+```{r MR.cont.by.sa1.PMF,fig.width=10,fig.height=6}
+if(!skip.mid.rise.content){
+  ggplot(plot.df,aes(x=factor(bin.center),y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    labs(x='Sa 1.0s, g',y='Contribution',
+         title = paste0(event.name,'\n Mid-rise Content Loss \n Distribution by Sa 1.0s'))
+}
+```
+
+```{r MR.cont.by.sa1.CDF,fig.width=10,fig.height=6}
+if(!skip.mid.rise.content){
+    ggplot(plot.df,aes(x=bin.center, y=cum.contri))+
+      geom_line(colour='darkgreen')+geom_point()+
+      labs(x='Sa 1.0s, g',y='CumuSum of Contribution',
+                        title = paste0(event.name,'\n Mid-rise Content Loss \n Distribution by Sa 1.0s'))
+}
+```
+
+### High-rise Building Content Loss Distribution
+
+If high-rise loss contributes exceed 10% of total ground
+up loss, loss distribution by building damage ratio
+and $S_a 2.0 s$ is included
+in this section.
+
+```{r HR.cont.by.bldg.prepare, include=F, echo=F}
+if(length(high.rise.contribution) == 0 ){
+  skip.high.rise.content = T
+}else if(length(high.rise.contribution) > 0 & high.rise.contribution < 0.1){
+  skip.high.rise.content = T
+}else{
+  skip.high.rise.content = F
+}
+if(!skip.high.rise.content){
+  bin.edges <- c(seq(0,0.1,by=0.01),
+                 seq(0.12, 0.5,by=0.02),
+                 seq(0.6,1.0,by=0.1))
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+  bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
+  bins <- data.frame(bin.names, bin.centers)
+
+  cont.damage <- EQsim.data[Height == height.band.names[3] &
+                            RVA > 0 & RVC > 0, 
+                            .(GridID,SHK.MDR.A = SHK.GU.A / RVA,
+                              SHK.MDR.C = SHK.GU.C / RVC,SHK.GU.C)]
+  cont.damage <- int.Hist[cont.damage, .(SA2, SHK.MDR.A, SHK.MDR.C, SHK.GU.C)]
+  total.cont.loss <- cont.damage[,sum(SHK.GU.C)]
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SHK.MDR.A >= low.bound & SHK.MDR.A < up.bound, bldg.damage := bin.names[i]]
+  }
+  cont.damage[SHK.MDR.A == bin.edges[length(bin.edges)], bldg.damage := bin.names[length(bin.names)]]
+
+  plot.df <- cont.damage[, .(GUC = sum(SHK.GU.C)), keyby = bldg.damage]
+  plot.df[, GUC.pct := GUC / total.cont.loss]
+  plot.df[, bin.center := bins$bin.centers[match(plot.df$bldg.damage, bins$bin.names)]]
+  setkey(plot.df, bin.center)
+  plot.df[, cum.contri := cumsum(GUC.pct)]
+}
+```
+
+```{r HR.cont.by.bldg.PMF,plot.width=10,plot.height=6,results='asis'}
+if(!skip.high.rise.content){
+  ggplot(plot.df,aes(x=factor(bin.center),y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    labs(x='Building damage ratio',y='Contribution',
+         title = paste0(event.name,'\n High-rise Content Loss \n Distribution by Building Damage'))
+}else{
+  cat('<span style="color:red">No shake content loss is from high rise building.</span>')
+}
+```
+
+```{r HR.cont.by.bldg.CDF,plot.width=10,plot.height=6}
+if(!skip.high.rise.content){
+    ggplot(plot.df,aes(x=bin.center, y=cum.contri))+
+      geom_line(colour='darkgreen')+geom_point()+
+      labs(x='Building damage ratio',y='CumSum of Contribution',
+           title = paste0(event.name,'\n High-rise Content Loss \n Distribution by Building Damage'))
+}
+```
+
+```{r HR.cont.by.sa2.prepare,include=F,echo=F}
+if(!skip.high.rise.content){
+  bin.edges <- c(seq(0,0.2,by=0.01),
+            seq(0.22, 0.4, by = 0.02),
+            seq(0.5, 1.0, by = 0.1),
+            seq(1.2, 4, by = 0.2), 10)
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+  bin.names <- c(paste0('< ',bin.edges[2]),
+                 paste0(bin.edges[2:(num.bin.edges-2)], ' - ', bin.edges[3:(num.bin.edges-1)]),
+                 paste0('> ',bin.edges[num.bin.edges-1]))
+  bins <- data.frame(bin.names, bin.centers)
+
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SA2 >= low.bound & SA2 < up.bound, Sa2.range := bin.names[i]]
+  }
+  cont.damage[SA2 == bin.edges[length(bin.edges)], Sa2.range := bin.names[length(bin.names)]]
+  plot.df <- cont.damage[, .(GUC = sum(SHK.GU.C)), by = Sa2.range]
+  plot.df[, GUC.pct := GUC / total.cont.loss]
+  plot.df[, bin.center := bins$bin.centers[match(plot.df$Sa2.range, bins$bin.names)]]
+  setkey(plot.df, bin.center)
+  plot.df[, cum.contri := cumsum(GUC.pct)]
+}
+```
+
+```{r HR.cont.by.sa2.PMF,plot.width=10,plot.height=6}
+if(!skip.high.rise.content){
+  ggplot(plot.df,aes(x=factor(bin.center),y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    labs(x='Sa 2.0s, g',y='Contribution',
+         title = paste0(event.name,'\n High-rise Content Loss \n Distribution by Sa 2.0s'))
+}
+```
+
+```{r HR.cont.by.sa2.CDF,plot.width=10,plot.height=6}
+if(!skip.high.rise.content){
+    ggplot(plot.df,aes(x=bin.center, y=cum.contri))+
+      geom_line(colour='darkgreen')+geom_point()+
+      labs(x='Sa 2.0s, g',y='CumSum of Contribution',
+           title = paste0(event.name,'\n High-rise Content Loss \n Distribution by Sa 2.0s'))
+}
+```
+
+### Tall Building Content Loss Distirubiont by Building Damage
+
+If tall loss contributes exceed 10% of total ground
+up loss, loss distribution by building damage ratio
+and $S_a 3.0 s$ is included
+in this section.
+
+```{r Tall.cont.by.bldg.prepare, include=F, echo=F}
+if(length(tall.contribution) == 0 ){
+  skip.tall.content = T
+}else if(length(tall.contribution) > 0 & tall.contribution < 0.1){
+  skip.tall.content = T
+}else{
+  skip.tall.content = F
+}
+if(!skip.tall.content){
+  bin.edges <- c(seq(0,0.1,by=0.01),
+                 seq(0.12, 0.5,by=0.02),
+                 seq(0.6,1.0,by=0.1))
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+  bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
+  bins <- data.frame(bin.names, bin.centers)
+
+  cont.damage <- EQsim.data[Height == height.band.names[4] &
+                            RVA > 0 & RVC > 0, 
+                            .(GridID,SHK.MDR.A = SHK.GU.A / RVA,
+                              SHK.MDR.C = SHK.GU.C / RVC,SHK.GU.C)]
+  cont.damage <- int.Hist[cont.damage, .(SA3, SHK.MDR.A, SHK.MDR.C, SHK.GU.C)]
+  total.cont.loss <- cont.damage[,sum(SHK.GU.C)]
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SHK.MDR.A >= low.bound & SHK.MDR.A < up.bound, bldg.damage := bin.names[i]]
+  }
+  cont.damage[SHK.MDR.A == bin.edges[length(bin.edges)], bldg.damage := bin.names[length(bin.names)]]
+
+  plot.df <- cont.damage[, .(GUC = sum(SHK.GU.C)), keyby = bldg.damage]
+  plot.df[, GUC.pct := GUC / total.cont.loss]
+  plot.df[, bin.center := bins$bin.centers[match(plot.df$bldg.damage, bins$bin.names)]]
+  setkey(plot.df, bin.center)
+  plot.df[, cum.contri := cumsum(GUC.pct)]
+}
+```
+
+```{r Tall.cont.by.bldg.PMF,plot.width=10,plot.height=6,results='asis'}
+if(!skip.tall.content){
+  ggplot(plot.df,aes(x=factor(bin.center),y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    labs(x='Building damage ratio',y='Contribution',
+         title = paste0(event.name,'\n Tall Building Content Loss \n Distribution by Building Damage'))
+}else{
+  cat('<span style="color:red">No shake content loss is from tall building.</span>')
+}
+```
+
+```{r Tall.cont.by.bldg.CDF,plot.width=10,plot.height=6}
+if(!skip.tall.content){
+    ggplot(plot.df,aes(x=bin.center, y=cum.contri))+
+      geom_line(colour='darkgreen')+geom_point()+
+      labs(x='Building damage ratio',y='CumSum of Contribution',
+           title = paste0(event.name,'\n Tall Building Content Loss \n Distribution by Building Damage'))
+}
+```
+
+```{r Tall.cont.by.sa3.prepare,include=F,echo=F}
+if(!skip.tall.content){
+  bin.edges <- c(seq(0,0.2,by=0.01),
+            seq(0.22, 0.4, by = 0.02),
+            seq(0.5, 1.0, by = 0.1),
+            seq(1.2, 4, by = 0.2), 10)
+  num.bin.edges <- length(bin.edges)
+  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
+  bin.names <- c(paste0('< ',bin.edges[2]),
+                 paste0(bin.edges[2:(num.bin.edges-2)], ' - ', bin.edges[3:(num.bin.edges-1)]),
+                 paste0('> ',bin.edges[num.bin.edges-1]))
+  bins <- data.frame(bin.names, bin.centers)
+
+  for(i in 1:length(bin.names)){
+    low.bound <- bin.edges[i]
+    up.bound <- bin.edges[i+1]
+    cont.damage[SA3 >= low.bound & SA3 < up.bound, Sa3.range := bin.names[i]]
+  }
+  cont.damage[SA3 == bin.edges[length(bin.edges)], Sa3.range := bin.names[length(bin.names)]]
+  plot.df <- cont.damage[, .(GUC = sum(SHK.GU.C)), keyby = Sa3.range]
+  plot.df[, GUC.pct := GUC / total.cont.loss]
+  plot.df <- plot.df[order(Sa3.range),]
+  plot.df[, bin.center := bins$bin.centers[match(plot.df$Sa3.range, bins$bin.names)]]
+  setkey(plot.df, bin.center)
+  plot.df[, cum.contri := cumsum(GUC.pct)]
+}
+```
+
+```{r Tall.cont.by.sa3.PMF,plot.width=10,plot.height=6}
+if(!skip.tall.content){
+  ggplot(plot.df,aes(x=bin.center,y=GUC.pct))+
+    geom_bar(fill='darkgreen',colour='gray',stat='identity')+
+    labs(x='Sa 3.0s, g',y='Contribution',
+                      title = paste0(event.name,'\n Tall Building Content Loss \n Distribution by Sa 3.0s'))
+}
+```
+
+```{r Tall.cont.by.sa3.CDF,plot.width=10,plot.height=6}
+if(!skip.tall.content){
+    ggplot(plot.df,aes(x=bin.center, y=cum.contri))+
+      geom_line(colour='darkgreen')+geom_point()+
+      labs(x='Sa 3.0s, g',y='CumSum of Contribution',
+                        title = paste0(event.name,'\n Tall Content Loss \n Distribution by Sa 3.0s'))
+}
+```
