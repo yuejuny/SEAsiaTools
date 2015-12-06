@@ -178,35 +178,28 @@ writeOGR(STATE.shp,dsn=file.path(US.Eng.dir, data.dir,'maps'),
 ```
 
 ```{r GU.by.STATE.map.plot,fig.width=12,fig.height=8,warning = FALSE}
+pal <- colorBin(palette = c("#E7E742","#E72C29"), 
+                domain = range(STATE.shp$GU.loss), bins = 5)
 leaflet() %>%
 addProviderTiles(provider = 'Stamen.TonerLite', group = 'Toner Lite')%>%
 addTiles(group = 'OSM')%>%
-addProviderTiles(map = m, provider = 'MapQuestOpen.Aerial',group='Aerial')
-
-pal <- colorBin(palette = c("#E7E742","#E72C29"), 
-                domain = range(STATE.shp$GU.loss), bins = 5)
-m <- addPolygons(map=m, data=STATE.shp, 
-                 color = pal(STATE.shp$GU.loss), 
-                 fill = TRUE, weight = 2, fillOpacity = 0.5, 
-                 group = "GUL", 
-                 popup = paste(STATE.shp$NAME, " GUL: mUSD", 
-                               paste0(formatC(STATE.shp$GU.loss/million,big.mark=',',format='f',digits=0))))
-m <- addPolygons(map=m, data=original.STATE.shp, 
-                 color = "green", fill = FALSE, 
-                 weight = 1, fillOpacity = 1, group = "STATE")
-m <- addLayersControl(map = m, baseGroups = c("Aerial","Toner Lite","OSM"), 
-                      overlayGroups = c("GUL", "STATE"),
-                      options = layersControlOptions(collapsed = FALSE))
-
-m <- addPolygons(map=m, data=rupture.srdf, weight = 2, 
-                   fill=F, color = 'darkblue',
-                   popup=paste0('Segment: ',rupture.srdf$segment))
-m <- addLegend(map = m, 
-               position = "bottomleft", pal = pal, 
-               values = range(STATE.shp$GU.loss), opacity = 1,
-               title = 'GU, USD')
-
-m 
+addProviderTiles(provider = 'MapQuestOpen.Aerial',group='Aerial')%>%
+addPolygons(data=STATE.shp, color = pal, 
+            fill = TRUE, weight = 2, fillOpacity = 0.5, group = "GUL", 
+            popup = paste(STATE.shp$NAME, " GUL: mUSD", 
+                          paste0(formatC(STATE.shp$GU.loss/million,big.mark=',',format='f',digits=0))))%>%
+addPolygons(data=original.STATE.shp, 
+            color = "green", fill = FALSE, 
+            weight = 1, fillOpacity = 1, group = "STATE")%>%
+addLayersControl(baseGroups = c("Aerial","Toner Lite","OSM"), 
+                 overlayGroups = c("GUL", "STATE"),
+                 options = layersControlOptions(collapsed = FALSE))%>%
+addPolygons(data=rupture.srdf, weight = 2, 
+            fill=F, color = 'darkblue',
+            popup=paste0('Segment: ',rupture.srdf$segment))%>%
+addLegend(position = "bottomleft", pal = pal, 
+          values = range(STATE.shp$GU.loss), opacity = 1,
+          title = 'GU, USD')
 ```
 
 # Shake loss distributions
@@ -505,23 +498,36 @@ SA03.breaks <- c(seq(0,0.2,by=0.01),
                  seq(0.22, 0.4, by = 0.02),
                  seq(0.5, 1.0, by = 0.1),
                  seq(1.2, 5, by = 0.2), 10)
+# grouping by breaks
+groupFun <- function(in.DT, breaks){
+  # in.DT has two columns: int, value. "int" is to be grouped
+  # by "breaks". 
+  bin.centers <- breaks[-1] - diff(breaks) * 0.5
+  bin.names <- paste(breaks[-(length(breaks))], '-', breaks[-1])
+  tot <- sum(in.DT$value)
+  in.DT[, contribution := value / tot]
+  for(i in 2:length(breaks)){
+    b <- breaks[i]
+    a <- breaks[i-1]
+    in.DT[a <= int & int <= b, group := bin.names[i-1]]
+    in.DT[a <= int & int <= b, bin.center := bin.centers[i-1]]
+  }
+  in.DT$group <- factor(in.DT$group, ordered = T, levels = bin.names)
+  cumsum.DT <- in.DT[, .(contribution = sum(contribution)), keyby = bin.center]
+  cumsum.DT[, cumsum.contri := cumsum(contribution)]
+  return(list(DT=in.DT, cumsum.DT))
+}
 
 low.rise.loss <- EQsim.data[Height == height.band.names[1], .(GridID,SHK.GU.A)]
 setkey(low.rise.loss, GridID)
-low.rise.loss <- int.Hist[low.rise.loss, .(SA03, SHK.GU.A)]
-Total.SHK.GU.Bldg <- sum(low.rise.loss$GU)
-low.rise.loss[, contribution := GU / Total.SHK.GU.Bldg]
-# Assign categorical tag 
-for(i in 2:length(SA03.breaks)){
-  b <- SA03.breaks[i]
-  a <- SA03.breaks[i-1]
-  low.rise.loss[a <= SA03 & SA03 <= b, group := paste0(a, ' - ', b)]
-}
-low.rise.loss$group <- factor(low.rise.loss$group, ordered = T)
-setkey(low.rise.loss, SA03)
-low.rise.loss[, cumusum.contri := cumsum(contribution)]
-write.csv(low.rise.loss, file = file.path(US.Eng.dir, data.dir, 'R.output', 
+temp <- int.Hist[low.rise.loss, .(int=SA03, value=SHK.GU.A)]
+temp <- data.table(int = sample(size = 1000, x = seq(from=0.02, to = 2.0, by = 0.01),
+                                replace = T),
+                   value = sample(rnorm(2000, mean = 1009, sd = 129), size = 1000))
+l <- groupFun(temp, SA03.breaks)
+write.csv(l[['DT']], file = file.path(US.Eng.dir, data.dir, 'R.output', 
                                           paste0(event.name,'.Low-rise.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
+cumsum.DT <- l[['cumsum.DT']]
 ```
 
 ```{r SHK.Loss.By.SA03.PMF, fig.width = 12, fig.height = 3}
@@ -534,8 +540,8 @@ ggplot(low.rise.loss, aes(x = group))+
 ```
 
 ```{r SHK.Loss.By.SA03.CDF, fig.width = 12, fig.height = 3}
-ggplot(low.rise.loss, aes(x = group, y = cum.contri))+
-  geom_line(colour='darkgreen') + 
+ggplot(cumusum.df, aes(x = bin.center, y = CumSum.contri))+
+  geom_line(colour='darkgreen') + geom_point() +
   labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'Cumu. sum contribution')
 ```
 
