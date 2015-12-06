@@ -41,7 +41,7 @@ DT$Peril <- factor(DT$Peril,levels=c('SHK','LIQ','TSU','LND', 'FFE', 'SPL'))
 
 ```{r GUByPeril_PieChart, fig.width=5,fig.height=5}
 ggplot(DT, aes(x = "", y = GU.mUSD, fill = Peril))+
-  geom_bar(width=1, stat='identity')+
+  geom_bar(width=1, stat='identity', fill = 'darkgreen' colour = 'white')+
   coord_polar(theta = "y")+
   labs(title = paste0(event.name,'\nGround up loss, mUSD'), x='',y='')
 ```
@@ -78,7 +78,7 @@ DT$Coverage <- factor(DT$Coverage, levels=c('bldg','cont','time'), ordered = T)
 
 ```{r GU.By.coverage_PieChart, fig.width=5,fig.height=5}
 ggplot(DT, aes(x = "", y = GU.mUSD, fill = Coverage))+
-  geom_bar(width=1, stat='identity')+
+  geom_bar(width=1, stat='identity', fill = 'darkgreen', colour = 'white')+
   coord_polar(theta = "y")+
   labs(title = paste0(event.name, '\nGround up loss, mUSD'),x='',y='')+
   scale_fill_manual(values=c('#105984','#C6DB42','#39BEB5'))
@@ -128,7 +128,7 @@ DT$Coverage <- factor(DT$Coverage, levels=c('bldg','cont','time'), ordered = T)
 
 ```{r MDR.By.Coverage.BarChart, fig.width=5,fig.height=5}
 ggplot(DT, aes(x = Coverage, y = MDR))+
-  geom_bar(stat='identity', fill = '#8CC63F', colour = 'white')+
+  geom_bar(stat='identity', fill = 'darkgreen', colour = 'white')+
   labs(title = event.name,x='',y='Mean damage raio')
 ```
 
@@ -303,7 +303,7 @@ out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
 
 ```{r SHK.GU.By.Height.PieChart, fig.width=7,fig.height=5}
 ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = Height))+
-  geom_bar(stat='identity',width = 1)+
+  geom_bar(stat='identity',fill = 'darkgreen', colour = 'white', width = 1)+
   coord_polar(theta= 'y')+
   scale_fill_manual(values=c('#A9C0DC','#6599CB','#0777B5','#0D639B'))+
   labs(title = paste0(event.name, '\nShake ground up loss, mUSD'),x='',y='')
@@ -329,7 +329,7 @@ rm(Grid.H.RV, affected.grids)
 
 ```{r SHK.MDR.By.Height.BarChart, fig.width=6,fig.height=5}
 ggplot(out.tb, aes(x = Height, y = MDR ))+
-  geom_bar(stat='identity',colour='white',fill='#8CC63F')+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+
   labs(title = event.name,x='Height',y='Shake MDR')+
   coord_flip()
 ```
@@ -350,7 +350,7 @@ out.tb[,GU.mUSD:=GU/million]
 
 ```{r SHK.GU.By.LOB.PieChart, fig.width=7,fig.height=5}
 ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = BC))+
-  geom_bar(stat='identity',width = 1)+
+  geom_bar(stat='identity',fill = 'darkgreen', colour = 'white', width = 1)+
   coord_polar(theta= 'y')+
   labs(title = paste0(event.name, '\nShake ground up loss, mUSD'),x='',y='')
 ```
@@ -374,7 +374,7 @@ rm(Grid.LOB.RV, affected.grids)
 
 ```{r SHK.MDR.By.LOB.BarChart, fig.width=5,fig.height=3.5}
 ggplot(out.tb, aes(x = BC, y = MDR))+
-  geom_bar(stat='identity',colour='white',fill='#8CC63F')+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+
   labs(title = event.name,x='Line of business',y='Shake MDR')
 ```
 
@@ -502,45 +502,42 @@ ggplot(DT, aes(x = factor(OCC), y = MDR))+
 ## Shake total GU loss distribution by ground motion intensity
 
 ```{r SHK.Loss.By.SA03, include = FALSE, echo=FALSE}
-bin.edges <- c(0, 0.02, 0.04, 0.06, 0.1, 0.15, 
-               0.2,0.25,0.3,0.4,0.5,0.6,0.8,
-               1.0,1.5,2.0,2.5,3.0,4.0, 100) 
-bin.names <- c(paste0('< ' ,bin.edges[2],' g'),
-               paste0(bin.edges[2:(length(bin.edges)-2)],' - ',
-                      bin.edges[3:(length(bin.edges)-1)]),
-               paste0('> ',bin.edges[length(bin.edges)-1],' g'))
-bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
-bins <- data.table(bin.names, bin.centers)
+SA03.breaks <- c(seq(0,0.2,by=0.01),
+                 seq(0.22, 0.4, by = 0.02),
+                 seq(0.5, 1.0, by = 0.1),
+                 seq(1.2, 5, by = 0.2), 10)
+
 low.rise.loss <- EQsim.data[Height == height.band.names[1], .(GridID,SHK.GU.A)]
 setkey(low.rise.loss, GridID)
 low.rise.loss <- int.Hist[low.rise.loss, .(SA03, SHK.GU.A)]
-low.rise.loss[SA03 == bin.edges[1], ':='(GM.level = bin.names[1])]
-for(i in 2:length(bin.edges)) {
-  low.rise.loss[SA03 <= bin.edges[i] & 
-             SA03 > bin.edges[i-1], ':='(GM.level = bin.names[i-1])]
+Total.SHK.GU.Bldg <- sum(low.rise.loss$GU)
+low.rise.loss[, contribution := GU / Total.SHK.GU.Bldg]
+# Assign categorical tag 
+for(i in 2:length(SA03.breaks)){
+  b <- SA03.breaks[i]
+  a <- SA03.breaks[i-1]
+  low.rise.loss[a <= SA03 & SA03 <= b, group := paste0(a, ' - ', b)]
 }
-DT <- low.rise.loss[,.(GU = sum(SHK.GU.A)), keyby = GM.level]
-Total.SHK.GU.Bldg <- sum(DT$GU)
-DT[, contribution := GU / Total.SHK.GU.Bldg]
-DT[, bin.center := bins$bin.centers[match(DT$GM.level, bins$bin.names)]]
-setkey(DT, bin.center)
-DT[, cum.contri := cumsum(contribution)]
-write.csv(DT, file = file.path(US.Eng.dir, data.dir, 'R.output', 
-                               paste0(event.name,'.Low-rise.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
+low.rise.loss$group <- factor(low.rise.loss$group, ordered = T)
+setkey(low.rise.loss, SA03)
+low.rise.loss[, cumusum.contri := cumsum(contribution)]
+write.csv(low.rise.loss, file = file.path(US.Eng.dir, data.dir, 'R.output', 
+                                          paste0(event.name,'.Low-rise.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
 ```
 
 ```{r SHK.Loss.By.SA03.PMF, fig.width = 12, fig.height = 3}
-# probability mass function
-ggplot(DT, aes(x = as.factor(bin.center), y = contribution))+
-  geom_bar(stat = 'identity',width = 0.2,fill='darkgreen',colour='white') + 
-  labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'Loss contribution')
+ggplot(low.rise.loss, aes(x = group))+
+  geom_histogram(aes(weight = contribution), fill = 'darkgreen', 
+                 colour = 'white', width = 0.5) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = 'Shake low rise building loss distribution', 
+       x = 'Sa 0.3 sec, g', y = 'Loss contribution')
 ```
 
 ```{r SHK.Loss.By.SA03.CDF, fig.width = 12, fig.height = 3}
-# cumulative density function
-ggplot(DT, aes(x = bin.center, y = cum.contri))+
-  geom_line(colour='darkgreen') + geom_point() + 
-  labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'CumuSum contribution')
+ggplot(low.rise.loss, aes(x = group, y = cum.contri))+
+  geom_line(colour='darkgreen') + 
+  labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'Cumu. sum contribution')
 ```
 
 If mid-rise loss contributes exceed 10% of total ground
