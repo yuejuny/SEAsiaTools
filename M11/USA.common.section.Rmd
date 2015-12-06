@@ -278,57 +278,6 @@ if(SHK.loss)
 }
 ```
 
-## Shake total GU loss by height
-
-Total ground up loss (buidling + content + time) caused by ground shaing
-is aggregated by building height.
-
-```{r SHK.GU.By.Height, include = FALSE, echo=FALSE}
-out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = Height]
-write.csv(out.tb[order(-1*GU),],
-          file = file.path(US.Eng.dir, data.dir,'R.output',
-                           paste0(event.name,'.SHK.GU.by.height.',today,'.csv')))
-out.tb[,GU.mUSD:=GU/million]
-out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
-```
-
-```{r SHK.GU.By.Height.PieChart, fig.width=7,fig.height=5}
-ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = Height))+
-  geom_bar(stat='identity',fill = 'darkgreen', colour = 'white', width = 1)+
-  coord_polar(theta= 'y')+
-  scale_fill_manual(values=c('#A9C0DC','#6599CB','#0777B5','#0D639B'))+
-  labs(title = paste0(event.name, '\nShake ground up loss, mUSD'),x='',y='')
-```
-
-Damage ratio of each height class is calculated by this formula:
-$$\frac{CovACD.GU.Loss}{Total.Rep.Value.on.affected.grids}$$
-
-```{r SHK.MDR.By.Height, include = FALSE, echo=FALSE}
-out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = .(GridID,Height)]
-load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.Height.RData'))
-Grid.H.RV[, RV:=RVA+RVC+RVD]
-setkey(out.tb, GridID, Height)
-setkey(Grid.H.RV, GridID, Height)
-affected.grids <- Grid.H.RV[out.tb,]
-out.tb <- affected.grids[,.(RV = sum(RV), GU = sum(GU)), by = Height]
-out.tb[,MDR := GU / RV]
-tot.GU <- sum(out.tb$GU)
-out.tb[, contribution := GU / tot.GU]
-out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
-out.tb <- out.tb[order(Height), ]
-write.csv(out.tb, 
-          file = file.path(US.Eng.dir, data.dir,'R.output',
-                           paste0(event.name,'.SHK.MDR.by.Height.',today,'.csv')))
-rm(Grid.H.RV, affected.grids)
-```
-
-```{r SHK.MDR.By.Height.BarChart, fig.width=6,fig.height=5}
-ggplot(out.tb, aes(x = Height, y = MDR ))+
-  geom_bar(stat='identity',colour='white',fill='darkgreen')+
-  labs(title = event.name,x='Height',y='Shake MDR')+
-  coord_flip()
-```
-
 ## Shake total GU loss by line of business
 
 Total ground up loss (buidling + content + time) caused by ground shaing
@@ -494,7 +443,58 @@ ggplot(DT, aes(x = factor(OCC), y = MDR))+
   labs(title = paste0(event.name, ': mean damage ratio'),x='Occupancy',y='Mean damage raio')
 ```
 
-## Shake building GU loss distribution by ground motion intensity
+## Shake total GU loss by height
+
+Total ground up loss (buidling + content + time) caused by ground shaing
+is aggregated by building height classes.
+
+```{r SHK.GU.By.Height, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = Height]
+write.csv(out.tb[order(-1*GU),],
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.GU.by.height.',today,'.csv')))
+out.tb[,GU.mUSD:=GU/million]
+out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+```
+
+```{r SHK.GU.By.Height.PieChart, fig.width=7,fig.height=5}
+ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = Height))+
+  geom_bar(stat='identity',fill = 'darkgreen', colour = 'white', width = 1)+
+  coord_polar(theta= 'y')+
+  scale_fill_manual(values=c('#A9C0DC','#6599CB','#0777B5','#0D639B'))+
+  labs(title = paste0(event.name, '\nShake ground up loss, mUSD'),x='',y='')
+```
+
+Damage ratio of each height class is calculated by this formula:
+$$\frac{CovACD.GU.Loss}{Total.Rep.Value.on.affected.grids}$$
+
+```{r SHK.MDR.By.Height, include = FALSE, echo=FALSE}
+out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = .(GridID,Height)]
+load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.Height.RData'))
+Grid.H.RV[, RV:=RVA+RVC+RVD]
+setkey(out.tb, GridID, Height)
+setkey(Grid.H.RV, GridID, Height)
+affected.grids <- Grid.H.RV[out.tb,]
+out.tb <- affected.grids[,.(RV = sum(RV), GU = sum(GU)), by = Height]
+out.tb[,MDR := GU / RV]
+tot.GU <- sum(out.tb$GU)
+out.tb[, contribution := GU / tot.GU]
+out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+out.tb <- out.tb[order(Height), ]
+write.csv(out.tb, 
+          file = file.path(US.Eng.dir, data.dir,'R.output',
+                           paste0(event.name,'.SHK.MDR.by.Height.',today,'.csv')))
+rm(Grid.H.RV, affected.grids)
+```
+
+```{r SHK.MDR.By.Height.BarChart, fig.width=6,fig.height=5}
+ggplot(out.tb, aes(x = Height, y = MDR ))+
+  geom_bar(stat='identity',colour='white',fill='darkgreen')+
+  labs(title = event.name,x='Height',y='Shake MDR')+
+  coord_flip()
+```
+
+## Shake building GU loss distribution
 
 ```{r breaks.definition, include = F, echo = F}
 SA03.breaks <- c(seq(0,0.2,by=0.01),
@@ -575,21 +575,44 @@ if(!skip.unknown){
 
 ```{r SHK.unknown.h.bldg.Loss.By.SA03.PMF, fig.width = 12, fig.height = 3}
 if(!skip.unknown){
-ggplot(l[[1]], aes(x = group))+
-  geom_histogram(aes(weight = contribution), fill = 'darkgreen', 
-                 colour = 'white', width = 0.5) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
-  labs(title = 'Shake unknown height building loss distribution', 
+  ggplot(l[[1]], aes(x = group))+
+    geom_histogram(aes(weight = contribution), fill = 'darkgreen', colour = 'white', width = 0.5) + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+      labs(title = 'Shake unknown height building loss distribution', 
        x = 'Sa 0.3 sec, g', y = 'Loss contribution')
 }
 ```
 
 ```{r SHK.unknown.h.bldg.Loss.By.SA03.CDF, fig.width = 12, fig.height = 3}
 if(!skip.unknown){
-ggplot(cumsum.DT, aes(x = bin.center, y = cumsum.contri))+
-  geom_line(colour='darkgreen') + geom_point() +
-  labs(title = 'Shake unknown height building loss distribution', 
-       x = 'Sa 0.3 sec, g', y = 'Cumsum contribution')
+  ggplot(cumsum.DT, aes(x = bin.center, y = cumsum.contri))+
+    geom_line(colour='darkgreen') + geom_point() +
+    labs(title = 'Shake unknown height building loss distribution', 
+         x = 'Sa 0.3 sec, g', y = 'Cumsum contribution')
+}
+```
+
+```{r shk.unknown.h.bldg.loss.driver.prepare, include = F, echo = F}
+if(!skip.unknown){
+  unknown.h.loss.cc <- EQsim.data[Height == height.band.names[5], .(bldg.GU = sum(SHK.GU.A)), by=CC]
+  o <- order(unknown.h.loss.cc$bldg.GU)
+  loss.driver <- unknown.h.loss.cc[rev(o), CC]
+  temp <- EQsim.data[CC == loss.driver[1] & RVA > 0, .(GridID, MDR = SHK.GU.A / RVA)]
+  setkey(temp, GridID)
+  temp <- int.Hist[temp, .(SA03, MDR)]
+  meanDF <- bin.average(bin.center = SA03.breaks[-1] - diff(SA03.breaks),
+                        x = temp$SA03,
+                        y = temp$MDR)
+}
+rm(unknown.h.loss.cc, unknown.h.loss)
+```
+
+```{r SHK.unknown.h.loss.driver, fig.width = 6, fig.height=4}
+if(!skip.unknown){
+  ggplot(meanDF, aes(x = x, y = mean.y))+
+    geom_line(colour = 'darkgreen')+
+    labs(x='Sa 0.3s, g', y='Mean damage ratio',
+         title=paste0('cc', loss.driver[1], ': Unknown Height mean damage function'))
 }
 ```
 
@@ -613,82 +636,254 @@ if(!skip.low.rise.bldg){
   setkey(low.rise.loss, GridID)
   temp <- int.Hist[low.rise.loss, .(int=SA03, value=SHK.GU.A)]
   l <- groupFun(temp, SA03.breaks)
-  write.csv(l$DT, file = file.path(US.Eng.dir, data.dir, 'R.output', 
+  write.csv(l[[1]], file = file.path(US.Eng.dir, data.dir, 'R.output', 
                                    paste0(event.name,'.Low-rise.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
 }
 ```
 
 ```{r SHK.Loss.By.SA03.PMF, fig.width = 12, fig.height = 3}
-ggplot(l[[1]], aes(x = group))+
-  geom_histogram(aes(weight = contribution), fill = 'darkgreen', 
-                 colour = 'white', width = 0.5) + 
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
-  labs(title = 'Shake low rise building loss distribution', 
+if(!skip.low.rise.bldg){
+  ggplot(l[[1]], aes(x = group))+
+    geom_histogram(aes(weight = contribution), fill = 'darkgreen', colour = 'white', width = 0.5) + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+      labs(title = 'Shake low rise building loss distribution', 
        x = 'Sa 0.3 sec, g', y = 'Loss contribution')
+}
 ```
 
 ```{r SHK.Loss.By.SA03.CDF, fig.width = 12, fig.height = 3}
-ggplot(cumsum.DT, aes(x = bin.center, y = cumsum.contri))+
-  geom_line(colour='darkgreen') + geom_point() +
-  labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'Cumu. sum contribution')
-
+if(!skip.low.rise.bldg){
+  ggplot(l[[2]], aes(x = bin.center, y = cumsum.contri))+
+    geom_line(colour='darkgreen') + geom_point() +
+    labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'cumsum contribution')
+}
 ```
+
+```{r shk.low-rise.loss.driver.prepare, include = F, echo = F}
+if(!skip.low.rise.bldg){
+  low.rise.loss.cc <- EQsim.data[Height == height.band.names[1], .(bldg.GU = sum(SHK.GU.A)), by=CC]
+  o <- order(low.rise.loss.cc$bldg.GU)
+  loss.driver <- low.rise.loss.cc[rev(o), CC]
+  temp <- EQsim.data[CC == loss.driver[1] & RVA > 0, .(GridID, MDR = SHK.GU.A / RVA)]
+  setkey(temp, GridID)
+  temp <- int.Hist[temp, .(SA03, MDR)]
+  meanDF <- bin.average(bin.center = SA03.breaks[-1] - diff(SA03.breaks),
+                        x = temp$SA03,
+                        y = temp$MDR)
+}
+rm(low.rise.loss.cc, low.rise.loss)
+```
+
+```{r shk.low-rise.loss.driver,fig.width = 6, fig.height = 4}
+if(!skip.low.rise.bldg){
+  ggplot(meanDF, aes(x = x, y = mean.y))+
+    geom_line(colour = 'darkgreen')+
+    labs(x='Sa 0.3s, g', y='Mean damage ratio',
+         title=paste0('cc', loss.driver[1], ': low-rise mean damage function'))
+}
+```
+
+### Mid-rise building
 
 If mid-rise loss contributes exceed 10% of total ground
 up loss, loss distribution by $S_a 1.0 s$ is included
 in this section.
 
 ```{r SHK.Loss.By.SA1, include = FALSE, echo=FALSE}
-bldg.Total.SHK.GU <- sum(EQsim.data$SHK.GU.A)
+if(length(mid.rise.contribution) == 0){
+  skip.mid.rise.bldg <- T
+}else if(mid.rise.contribution < 0.1){
+  skip.mid.rise.bldg <- T
+}else{
+  skip.mid.rise.bldg <- F
+}
+if(!skip.mid.rise.bldg){
 mid.rise.loss <- EQsim.data[Height == height.band.names[2], .(GridID,SHK.GU.A)]
 setkey(mid.rise.loss, GridID)
-mid.rise.loss <- int.Hist[mid.rise.loss, .(SA1, SHK.GU.A)]
-bldg.mid.rise.SHK.GU <- sum(mid.rise.loss$SHK.GU.A)
-decent.mid.rise.loss <- F
-if(bldg.mid.rise.SHK.GU / bldg.Total.SHK.GU > 0.1)
-{
-  # if mid rise building contribute more than 10% total loss
-  # plot mid-rise loss distribution
-  decent.mid.rise.loss <- T
-  bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
-  bin.names <- c(paste0('< ' ,bin.edges[2],' g'),
-                 paste0(bin.edges[2:(length(bin.edges)-2)],' - ',
-                        bin.edges[3:(length(bin.edges)-1)]),
-                 paste0('> ',bin.edges[length(bin.edges)-1],' g'))
-  bins <- data.frame(bin.names, bin.centers)
-  # assign intensity level to EQsim.data
-  mid.rise.loss[SA1 == bin.edges[1], GM.level := bin.names[1]]
-  for(i in 2:length(bin.edges)) {
-    mid.rise.loss[SA1 <= bin.edges[i] & 
-                  SA1 > bin.edges[i-1], GM.level := bin.names[i-1]]
-  }
-  DT <- mid.rise.loss[,.(GU = sum(SHK.GU.A)), by = GM.level]
-  Total.SHK.GU.Bldg <- sum(DT$GU)
-  DT[, contribution := GU / Total.SHK.GU.Bldg]
-  DT[, bin.center := bins$bin.centers[match(DT$GM.level, bins$bin.names)]]
-  setkey(DT, bin.center)
-  DT[, cum.contri := cumsum(contribution)]
-  write.csv(DT, file = file.path(US.Eng.dir, data.dir, 'R.output', 
+temp <- int.Hist[mid.rise.loss, .(SA1, SHK.GU.A)]
+l <- groupFun(temp, SA1.breaks)
+write.csv(l[[1]], file = file.path(US.Eng.dir, data.dir, 'R.output', 
                                  paste0(event.name,'.Mid-rise.Bldg.SHK.GU.distribution.by.Sa1.',today,'.csv')))
 }
 ```
 
 ```{r SHK.Loss.By.SA1.PMF, fig.width = 12, fig.height = 3}
-if(decent.mid.rise.loss) {
-  ggplot(DT, aes(x = as.factor(bin.center), y = contribution))+
-    geom_bar(stat = 'identity',width = 0.2,colour='white',fill='darkgreen') + 
-    labs(title = 'Shake mid-rise building loss distribution', x = 'Sa 1.0 sec, g', y = 'Loss contribution')
+if(!skip.mid.rise.bldg){
+  ggplot(l[[1]], aes(x = group)+
+    geom_histogram(aes(weight = contribution), width = 0.5,colour='white',fill='darkgreen') + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+    labs(title = 'Shake mid-rise building loss distribution', 
+         x = 'Sa 1.0 sec, g', y = 'Loss contribution')
 }
 ```
 
 ```{r SHK.Loss.By.SA1.CDF, fig.width = 12, fig.height = 3}
-if(decent.mid.rise.loss) {
-  ggplot(DT, aes(x = bin.center, y = cum.contri))+
+if(!skip.mid.rise.bldg) {
+  ggplot(l[[2]], aes(x = bin.center, y = cumsum.contri))+
     geom_line(colour = 'darkgreen') + geom_point() +
     labs(title = 'Shake mid-rise building loss distribution', x = 'Sa 1.0 sec, g',
          y = 'Cumsum contribution')
 }
 ```
+
+```{r shk.mid-rise.loss.driver.prepare, include = F, echo = F}
+if(!skip.mid.rise.bldg){
+  mid.rise.loss.cc <- EQsim.data[Height == height.band.names[2], .(bldg.GU = sum(SHK.GU.A)), by=CC]
+  o <- order(mid.rise.loss.cc$bldg.GU)
+  loss.driver <- mid.rise.loss.cc[rev(o), CC]
+  temp <- EQsim.data[CC == loss.driver[1] & RVA > 0, .(GridID, MDR = SHK.GU.A / RVA)]
+  setkey(temp, GridID)
+  temp <- int.Hist[temp, .(SA1, MDR)]
+  meanDF <- bin.average(bin.center = SA1.breaks[-1] - diff(SA1.breaks),
+                        x = temp$SA1,
+                        y = temp$MDR)
+}
+rm(mid.rise.loss.cc, mid.rise.loss)
+```
+
+```{r shk.mid-rise.loss.driver,fig.width = 6, fig.height = 4}
+if(!skip.mid.rise.bldg){
+  ggplot(meanDF, aes(x = x, y = mean.y))+
+    geom_line(colour = 'darkgreen')+
+    labs(x='Sa 1.0s, g', y='Mean damage ratio',
+         title=paste0('cc', loss.driver[1], ': mid-rise mean damage function'))
+}
+```
+
+### High-rise building
+
+If high-rise loss contributes exceed 10% of total ground
+up loss, loss distribution by $S_a 2.0 s$ is included
+in this section.
+
+```{r SHK.Loss.By.SA2, include = FALSE, echo=FALSE}
+if(length(high.rise.contribution) == 0){
+  skip.high.rise.bldg <- T
+}else if(high.rise.contribution < 0.1){
+  skip.high.rise.bldg <- T
+}else{
+  skip.high.rise.bldg <- F
+}
+if(!skip.high.rise.bldg){
+  high.rise.loss <- EQsim.data[Height == height.band.names[3], .(GridID,SHK.GU.A)]
+  setkey(high.rise.loss, GridID)
+  temp <- int.Hist[high.rise.loss, .(SA2, SHK.GU.A)]
+  l <- groupFun(temp, SA2.breaks)
+  write.csv(l[[1]], file = file.path(US.Eng.dir, data.dir, 'R.output', 
+                                     paste0(event.name,'.high-rise.Bldg.SHK.GU.distribution.by.Sa2.',today,'.csv')))
+}
+```
+
+```{r SHK.Loss.By.SA2.PMF, fig.width = 12, fig.height = 3}
+if(!skip.high.rise.bldg){
+  ggplot(l[[1]], aes(x = group)+
+    geom_histogram(aes(weight = contribution), width = 0.5,colour='white',fill='darkgreen') + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+    labs(title = 'Shake high-rise building loss distribution', 
+         x = 'Sa 2.0 sec, g', y = 'Loss contribution')
+}
+```
+
+```{r SHK.Loss.By.SA2.CDF, fig.width = 12, fig.height = 3}
+if(!skip.high.rise.bldg) {
+  ggplot(l[[2]], aes(x = bin.center, y = cumsum.contri))+
+    geom_line(colour = 'darkgreen') + geom_point() +
+    labs(title = 'Shake high-rise building loss distribution', x = 'Sa 2.0 sec, g',
+         y = 'Cumsum contribution')
+}
+```
+
+```{r shk.high-rise.loss.driver.prepare, include = F, echo = F}
+if(!skip.high.rise.bldg){
+  high.rise.loss.cc <- EQsim.data[Height == height.band.names[3], .(bldg.GU = sum(SHK.GU.A)), by=CC]
+  o <- order(high.rise.loss.cc$bldg.GU)
+  loss.driver <- high.rise.loss.cc[rev(o), CC]
+  temp <- EQsim.data[CC == loss.driver[1] & RVA > 0, .(GridID, MDR = SHK.GU.A / RVA)]
+  setkey(temp, GridID)
+  temp <- int.Hist[temp, .(SA2, MDR)]
+  meanDF <- bin.average(bin.center = SA2.breaks[-1] - diff(SA2.breaks),
+                        x = temp$SA2,
+                        y = temp$MDR)
+}
+rm(high.rise.loss.cc, high.rise.loss)
+```
+
+```{r shk.high-rise.loss.driver,fig.width = 6, fig.height = 4}
+if(!skip.high.rise.bldg){
+  ggplot(meanDF, aes(x = x, y = mean.y))+
+    geom_line(colour = 'darkgreen')+
+    labs(x='Sa 2.0s, g', y='Mean damage ratio',
+         title=paste0('cc', loss.driver[1], ': high-rise mean damage function'))
+}
+```
+
+### Tall building
+
+If tall building contributes exceed 10% of total ground
+up loss, loss distribution by $S_a 3.0 s$ is included
+in this section.
+
+```{r SHK.Loss.By.SA3, include = FALSE, echo=FALSE}
+if(length(tall.bldg.contribution) == 0){
+  skip.tall.bldg <- T
+}else if(tall.bldg.contribution < 0.1){
+  skip.tall.bldg <- T
+}else{
+  skip.tall.bldg <- F
+}
+if(!skip.tall.bldg){
+  tall.loss <- EQsim.data[Height == height.band.names[4], .(GridID,SHK.GU.A)]
+  setkey(tall.loss, GridID)
+  temp <- int.Hist[tall.loss, .(SA3, SHK.GU.A)]
+  l <- groupFun(temp, SA3.breaks)
+  write.csv(l[[1]], file = file.path(US.Eng.dir, data.dir, 'R.output', 
+                                     paste0(event.name,'.tall.Bldg.SHK.GU.distribution.by.Sa2.',today,'.csv')))
+}
+```
+
+```{r SHK.Loss.By.SA3.PMF, fig.width = 12, fig.height = 3}
+if(!skip.tall.bldg){
+  ggplot(l[[1]], aes(x = group)+
+    geom_histogram(aes(weight = contribution), width = 0.5,colour='white',fill='darkgreen') + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+    labs(title = 'Shake tall building loss distribution', 
+         x = 'Sa 3.0 sec, g', y = 'Loss contribution')
+}
+```
+
+```{r SHK.Loss.By.SA3.CDF, fig.width = 12, fig.height = 3}
+if(!skip.tall.bldg) {
+  ggplot(l[[2]], aes(x = bin.center, y = cumsum.contri))+
+    geom_line(colour = 'darkgreen') + geom_point() +
+    labs(title = 'Shake tall building loss distribution', x = 'Sa 3.0 sec, g',
+         y = 'Cumsum contribution')
+}
+```
+
+```{r shk.tall.loss.driver.prepare, include = F, echo = F}
+if(!skip.tall.bldg){
+  tall.loss.cc <- EQsim.data[Height == height.band.names[4], .(bldg.GU = sum(SHK.GU.A)), by=CC]
+  o <- order(tall.loss.cc$bldg.GU)
+  loss.driver <- tall.loss.cc[rev(o), CC]
+  temp <- EQsim.data[CC == loss.driver[1] & RVA > 0, .(GridID, MDR = SHK.GU.A / RVA)]
+  setkey(temp, GridID)
+  temp <- int.Hist[temp, .(SA3, MDR)]
+  meanDF <- bin.average(bin.center = SA3.breaks[-1] - diff(SA3.breaks),
+                        x = temp$SA3,
+                        y = temp$MDR)
+}
+rm(tall.loss.cc, tall.loss)
+```
+
+```{r shk.tall.loss.driver,fig.width = 6, fig.height = 4}
+if(!skip.tall.bldg){
+  ggplot(meanDF, aes(x = x, y = mean.y))+
+    geom_line(colour = 'darkgreen')+
+    labs(x='Sa 3.0s, g', y='Mean damage ratio',
+         title=paste0('cc', loss.driver[1], ': tall mean damage function'))
+}
+```
+
 ## Shake total GU loss distribution by distance to rupture
 
 ```{r SHK.GU.Dist.prepare, include = F, echo = F}
