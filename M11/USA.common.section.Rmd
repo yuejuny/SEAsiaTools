@@ -288,7 +288,6 @@ out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = Height]
 write.csv(out.tb[order(-1*GU),],
           file = file.path(US.Eng.dir, data.dir,'R.output',
                            paste0(event.name,'.SHK.GU.by.height.',today,'.csv')))
-
 out.tb[,GU.mUSD:=GU/million]
 out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
 ```
@@ -301,10 +300,11 @@ ggplot(out.tb, aes(x = "", y = GU.mUSD, fill = Height))+
   labs(title = paste0(event.name, '\nShake ground up loss, mUSD'),x='',y='')
 ```
 
+Damage ratio of each height class is calculated by this formula:
+$$\frac{CovACD.GU.Loss}{Total.Rep.Value.on.affected.grids}$$
+
 ```{r SHK.MDR.By.Height, include = FALSE, echo=FALSE}
 out.tb <- EQsim.data[,.(GU=sum(SHK.GU.A+SHK.GU.C+SHK.GU.D)),by = .(GridID,Height)]
-# Grid.H.RV is a data.table with 5 columns
-# GridID, Height, RVA, RVC, RVD
 load(file.path(US.Eng.dir, 'Exposure_Claims/IED/2015_IED_summary/RData/IED.RV.by.GridID.Height.RData'))
 Grid.H.RV[, RV:=RVA+RVC+RVD]
 setkey(out.tb, GridID, Height)
@@ -312,7 +312,10 @@ setkey(Grid.H.RV, GridID, Height)
 affected.grids <- Grid.H.RV[out.tb,]
 out.tb <- affected.grids[,.(RV = sum(RV), GU = sum(GU)), by = Height]
 out.tb[,MDR := GU / RV]
+tot.GU <- sum(out.tb$GU)
+out.tb[, contribution := GU / tot.GU]
 out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+out.tb <- out.tb[order(Height), ]
 write.csv(out.tb, 
           file = file.path(US.Eng.dir, data.dir,'R.output',
                            paste0(event.name,'.SHK.MDR.by.Height.',today,'.csv')))
@@ -491,14 +494,27 @@ ggplot(DT, aes(x = factor(OCC), y = MDR))+
   labs(title = paste0(event.name, ': mean damage ratio'),x='Occupancy',y='Mean damage raio')
 ```
 
-## Shake total GU loss distribution by ground motion intensity
+## Shake building GU loss distribution by ground motion intensity
 
-```{r SHK.Loss.By.SA03, include = FALSE, echo=FALSE}
+```{r breaks.definition, include = F, echo = F}
 SA03.breaks <- c(seq(0,0.2,by=0.01),
                  seq(0.22, 0.4, by = 0.02),
                  seq(0.5, 1.0, by = 0.1),
                  seq(1.2, 5, by = 0.2), 10)
-# grouping by breaks
+SA1.breaks <- c(0, 0.02, 0.04, 0.06, 0.1, 0.15,
+               0.2,0.25,0.3,0.4,0.5,0.6,0.8,1.0,
+               1.5,2, 3, 4, 100) 
+SA2.breaks <- c(seq(0,0.2,by=0.01),
+                seq(0.22, 0.4, by = 0.02),
+                seq(0.5, 1.0, by = 0.1),
+                seq(1.2, 4, by = 0.2), 10)
+SA3.breaks <- c(seq(0,0.2,by=0.01),
+                seq(0.22, 0.4, by = 0.02),
+                seq(0.5, 1.0, by = 0.1),
+                seq(1.2, 4, by = 0.2), 10)
+MDR.breaks <- c(seq(0,0.1,by=0.01),
+               seq(0.12, 0.5,by=0.02),
+               seq(0.6,1.0,by=0.1))
 groupFun <- function(in.DT, breaks){
   # in.DT has two columns: int, value. "int" is to be grouped
   # by "breaks". 
@@ -515,23 +531,95 @@ groupFun <- function(in.DT, breaks){
   in.DT$group <- factor(in.DT$group, ordered = T, levels = bin.names)
   cumsum.DT <- in.DT[, .(contribution = sum(contribution)), keyby = bin.center]
   cumsum.DT[, cumsum.contri := cumsum(contribution)]
-  return(list(DT=in.DT, cumsum.DT))
+  return(list(in.DT, cumsum.DT))
 }
+```
 
-low.rise.loss <- EQsim.data[Height == height.band.names[1], .(GridID,SHK.GU.A)]
-setkey(low.rise.loss, GridID)
-temp <- int.Hist[low.rise.loss, .(int=SA03, value=SHK.GU.A)]
-temp <- data.table(int = sample(size = 1000, x = seq(from=0.02, to = 2.0, by = 0.01),
-                                replace = T),
-                   value = sample(rnorm(2000, mean = 1009, sd = 129), size = 1000))
-l <- groupFun(temp, SA03.breaks)
-write.csv(l[['DT']], file = file.path(US.Eng.dir, data.dir, 'R.output', 
-                                          paste0(event.name,'.Low-rise.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
-cumsum.DT <- l[['cumsum.DT']]
+```{r shk.bldg.loss.by.height, include= F, echo = F}
+out.tb <- EQsim.data[, .(GU=sum(SHK.GU.A)), by = Height]
+out.tb$Height <- factor(out.tb$Height, levels = height.band.names, ordered = T)
+out.tb <- out.tb[order(Height), ]
+tot.covA.GU <- sum(out.tb$GU)
+out.tb[, contribution := GU / tot.covA.GU]
+low.rise.bldg.contribution <- out.tb[Height == height.band.names[1], contribution]
+mid.rise.bldg.contribution <- out.tb[Height == height.band.names[2], contribution]
+high.rise.bldg.contribution <- out.tb[Height == height.band.names[3], contribution]
+tall.bldg.contribution <- out.tb[Height == height.band.names[4], contribution]
+unknown.h.bldg.contribution <- out.tb[Height == height.band.names[5], contribution]
+rm(out.tb)
+```
+
+### Unknown height building
+
+If unknown height building contributes more than 10%
+of coverage A GU loss, unknown height loss distribution
+will be included in this section.
+
+```{r SHK.loss.unknown.h, include = F, echo = F}
+if(length(unknown.h.bldg.contribution) == 0){
+  skip.unknown <- T
+}else if(unknown.h.bldg.contribution < 0.1){
+  skip.unknown <- T
+}else{
+  skip.unknown <- F
+}
+if(!skip.unknown){
+  unknown.h.loss <- EQsim.data[Height == height.band.names[5], .(GridID,SHK.GU.A)]
+  setkey(unknown.h.loss, GridID)
+  temp <- int.Hist[unknown.h.loss, .(int=SA03, value=SHK.GU.A)]
+  l <- groupFun(temp, SA03.breaks)
+  write.csv(l[[1]], file = file.path(US.Eng.dir, data.dir, 'R.output', 
+                                   paste0(event.name,'.unknown.h.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
+}
+```
+
+```{r SHK.unknown.h.bldg.Loss.By.SA03.PMF, fig.width = 12, fig.height = 3}
+if(!skip.unknown){
+ggplot(l[[1]], aes(x = group))+
+  geom_histogram(aes(weight = contribution), fill = 'darkgreen', 
+                 colour = 'white', width = 0.5) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  labs(title = 'Shake unknown height building loss distribution', 
+       x = 'Sa 0.3 sec, g', y = 'Loss contribution')
+}
+```
+
+```{r SHK.unknown.h.bldg.Loss.By.SA03.CDF, fig.width = 12, fig.height = 3}
+if(!skip.unknown){
+ggplot(cumsum.DT, aes(x = bin.center, y = cumsum.contri))+
+  geom_line(colour='darkgreen') + geom_point() +
+  labs(title = 'Shake unknown height building loss distribution', 
+       x = 'Sa 0.3 sec, g', y = 'Cumsum contribution')
+}
+```
+
+### Low-rise building
+
+If low-rise building contributes more than
+10% of total coverage A GU loss, low-rise
+building loss distribution will be included
+in this section.
+
+```{r SHK.Loss.By.SA03, include = FALSE, echo=FALSE}
+if(length(low.rise.bldg.contribution) == 0){
+  skip.low.rise.bldg <- T
+}else if(low.rise.bldg.contribution < 0.1){
+  skip.low.rise.bldg <- T
+}else{
+  skip.low.rise.bldg <- F
+}
+if(!skip.low.rise.bldg){
+  low.rise.loss <- EQsim.data[Height == height.band.names[1], .(GridID,SHK.GU.A)]
+  setkey(low.rise.loss, GridID)
+  temp <- int.Hist[low.rise.loss, .(int=SA03, value=SHK.GU.A)]
+  l <- groupFun(temp, SA03.breaks)
+  write.csv(l$DT, file = file.path(US.Eng.dir, data.dir, 'R.output', 
+                                   paste0(event.name,'.Low-rise.Bldg.SHK.GU.distribution.by.Sa03.',today,'.csv')))
+}
 ```
 
 ```{r SHK.Loss.By.SA03.PMF, fig.width = 12, fig.height = 3}
-ggplot(low.rise.loss, aes(x = group))+
+ggplot(l[[1]], aes(x = group))+
   geom_histogram(aes(weight = contribution), fill = 'darkgreen', 
                  colour = 'white', width = 0.5) + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
@@ -540,9 +628,10 @@ ggplot(low.rise.loss, aes(x = group))+
 ```
 
 ```{r SHK.Loss.By.SA03.CDF, fig.width = 12, fig.height = 3}
-ggplot(cumusum.df, aes(x = bin.center, y = CumSum.contri))+
+ggplot(cumsum.DT, aes(x = bin.center, y = cumsum.contri))+
   geom_line(colour='darkgreen') + geom_point() +
   labs(title = 'Shake low rise building loss distribution', x = 'Sa 0.3 sec, g', y = 'Cumu. sum contribution')
+
 ```
 
 If mid-rise loss contributes exceed 10% of total ground
@@ -561,9 +650,6 @@ if(bldg.mid.rise.SHK.GU / bldg.Total.SHK.GU > 0.1)
   # if mid rise building contribute more than 10% total loss
   # plot mid-rise loss distribution
   decent.mid.rise.loss <- T
-  bin.edges <- c(0, 0.02, 0.04, 0.06, 0.1, 0.15,
-                 0.2,0.25,0.3,0.4,0.5,0.6,0.8,1.0,
-                 1.5,2, 3, 4, 100) 
   bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
   bin.names <- c(paste0('< ' ,bin.edges[2],' g'),
                  paste0(bin.edges[2:(length(bin.edges)-2)],' - ',
@@ -717,9 +803,6 @@ ggplot(temp, aes(x = "", y = cont.GU, fill = Height))+
 ### Low-rise Building Content Loss Distirbution
 
 ```{r LR.Cont.by.bldg.prepare, include = FALSE, echo=FALSE}
-bin.edges <- c(seq(0,0.1,by=0.01),
-               seq(0.12, 0.5,by=0.02),
-               seq(0.6,1.0,by=0.1))
 num.bin.edges <- length(bin.edges)
 bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
 bin.names <- c(paste0(bin.edges[1:(num.bin.edges - 1)],' - ',bin.edges[2:num.bin.edges]))
@@ -990,10 +1073,6 @@ if(!skip.high.rise.content){
 
 ```{r HR.cont.by.sa2.prepare,include=F,echo=F}
 if(!skip.high.rise.content){
-  bin.edges <- c(seq(0,0.2,by=0.01),
-            seq(0.22, 0.4, by = 0.02),
-            seq(0.5, 1.0, by = 0.1),
-            seq(1.2, 4, by = 0.2), 10)
   num.bin.edges <- length(bin.edges)
   bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
   bin.names <- c(paste0('< ',bin.edges[2]),
@@ -1100,10 +1179,6 @@ if(!skip.tall.content){
 
 ```{r Tall.cont.by.sa3.prepare,include=F,echo=F}
 if(!skip.tall.content){
-  bin.edges <- c(seq(0,0.2,by=0.01),
-            seq(0.22, 0.4, by = 0.02),
-            seq(0.5, 1.0, by = 0.1),
-            seq(1.2, 4, by = 0.2), 10)
   num.bin.edges <- length(bin.edges)
   bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
   bin.names <- c(paste0('< ',bin.edges[2]),
