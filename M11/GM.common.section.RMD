@@ -1,7 +1,6 @@
 # Catalog, Soil and Ground motion intensity
 
 ## Catalog Information
-
 ```{r catalog.info,echo=F,results='asis'}
   pandoc.table(as.data.frame(catalog),style='rmarkdown')
 ```
