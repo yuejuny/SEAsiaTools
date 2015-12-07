@@ -890,33 +890,20 @@ if(!skip.tall.bldg){
 Grid.loss <- EQsim.data[, .(GU = sum(SHK.GU.A + SHK.GU.C + SHK.GU.D)), keyby=GridID]
 DT <- int.Hist[Grid.loss, .(GridID, lat, lon, GU, dist_surf)]
 bin.edges <- seq(from = min(DT$dist_surf), to = max(DT$dist_surf), by = 3)
-bin.centers <- bin.edges[-1] - 0.5 * diff(bin.edges)
-bin.names <- paste(bin.edges[-(length(bin.edges))], '-', bin.edges[-1])
-bins <- data.frame(bin.names, bin.centers)
-DT[dist_surf == bin.edges[1], dis := bin.names[1]]
-for(i in 2:length(bin.edges)){
-  DT[bin.edges[i-1] < dist_surf & dist_surf <= bin.edges[i], 
-            dis := bin.names[i]]
-}
-plot.df <- DT[, .(GU = sum(GU)), by = dis]
-GU.tot <- sum(plot.df$GU)
-plot.df[, contribution := GU / GU.tot]
-plot.df[, bin.center := bins$bin.centers[match(plot.df$dis, bins$bin.names)]]
-setkey(plot.df, bin.center)
-plot.df[, cum.contri := cumsum(contribution)]
-rm(Grid.loss)
-DT[, GU.pct := GU / GU.tot] # for making map in section 'SHK.GU.distribution.map'
+temp <- DT[, .(int = dist_surf, value = GU)]
+l <- groupFun(in.DT = temp, breaks = bin.edges)
 ```
 
 ```{r SHK.GU.Distance.Distri.PMF, fig.width = 10, fig.height = 5}
-ggplot(plot.df, aes(x = as.factor(bin.center), y = contribution)) +
-  geom_bar(stat = 'identity', width = 0.2, fill = 'darkgreen', colour = 'white') +
+ggplot(l[[1]], aes(x = factor(bin.center))) +
+  geom_histogram(aes(weight = contribution), width = 0.5, fill = 'darkgreen', colour = 'white') +
+  theme(axis.text.x = element_text(angle=45, hjust=1))+
   labs(x = 'Distance to surface rupture, km', y = 'Contribution',
        title = 'Shake total GU loss distribution')
 ```
 
 ```{r SHK.GU.Distance.Distri.CDF, fig.width = 10, fig.height = 5}
-ggplot(plot.df, aes(x = bin.center, y = cum.contri)) +
+ggplot(l[[2]], aes(x = bin.center, y = cumsum.contri)) +
   geom_line(colour = 'darkgreen')  + geom_point() +
   labs(x = 'Distance to surface rupture, km', y = 'Cumusum contribution',
        title = 'Shake total GU loss distribution')
@@ -924,6 +911,7 @@ ggplot(plot.df, aes(x = bin.center, y = cum.contri)) +
 
 ```{r SHK.GU.distribution.map.prepare, fig.width = 12, fig.height = 8, warning = F}
 # DT is built in section SHK.GU.Dist.prepare
+DT[, GU.pct := GU / sum(GU)]
 LongMin <- floor(min(DT$lon))
 LongMax <- ceiling(max(DT$lon))
 LatMin <- floor(min(DT$lat))
@@ -962,16 +950,16 @@ leaflet() %>%
 ```{r SHK.GU.Distri.by.Soil.prepare, include = F, echo = F}
 Grid.loss <- EQsim.data[, .(GU = sum(SHK.GU.A + SHK.GU.C + SHK.GU.D)), keyby=GridID]
 DT <- int.Hist[Grid.loss, .(GU, Soil)]
-tot.GU <- sum(DT$GU)
-DT[, contribution := GU / tot.GU]
-setkey(DT, Soil)
-DT[, cumsum.contri := cumsum(contribution)]
+DT[, contribution := GU / sum(GU)]
 ```
 ```{r SHK.GU.Distri.by.Soil.PMF, fig.width = 10, fig.height = 5}
-p <- ggplot(DT, aes(Soil)) + 
+ggplot(DT, aes(Soil)) + 
   geom_bar(aes(weight = contribution), fill = 'darkgreen', 
            binwidth= 0.5, colour = 'white')+
   labs(y = 'Contribution', x = '')
+```
+```{r SHK.GU.by.soil.CDF.prepare, include = F, echo = F}
+
 ggplot(DT, aes(x = Soil, y = cumsum.contri)) + geom_line(colour = 'darkgreen')
 ```
 ## Shake Content Loss Distribution 
